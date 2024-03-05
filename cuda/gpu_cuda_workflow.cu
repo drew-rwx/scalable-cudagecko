@@ -573,14 +573,11 @@ int main(int argc, char **argv) {
     ////////////////////////////////////////////////////////////////////////////////
     // Run the reference blocks
     ////////////////////////////////////////////////////////////////////////////////
-    // TODO: make this multi-GPU
 
-    // TODO: precompute a shared worklist
-
-    const int n_devices = 1;  // TODO
-// TODO: shared() private() etc.
+    // TODO: precompute a shared worklist, or use atomic adds to increment pos_in_ref (and pos_in_reverse_ref)
+    const int n_devices = 1;  // TODO: query number of GPUs, or add a command-line arg to specify which GPUs to use (not sure what works best for TACC)
 #pragma omp parallel for num_threads(n_devices) default(none) \
-    shared(pos_in_ref)
+shared(pos_in_ref)
     for (int device_id = 0; device_id < n_devices; device_id++) {
       cudaSetDevice(device_id);
 
@@ -608,8 +605,8 @@ int main(int argc, char **argv) {
         // Recopy x words because they were overwritten in the hits generation
         ret = cudaMemcpy(ptr_keys, dict_x_keys, items_read_x * sizeof(uint64_t), cudaMemcpyHostToDevice);
         ret = cudaMemcpy(ptr_values, dict_x_values, items_read_x * sizeof(uint32_t), cudaMemcpyHostToDevice);
-        // Memset everything that comes after the uploaded keys in case it was overwritten
 
+        // Memset everything that comes after the uploaded keys in case it was overwritten
         if (items_read_x < words_at_once) {
           ret = cudaMemset(&ptr_keys[items_read_x], 0xFFFFFFFF, (words_at_once - items_read_x) * sizeof(uint64_t));
           ret = cudaMemset(&ptr_values[items_read_x], 0xFFFFFFFF, (words_at_once - items_read_x) * sizeof(uint32_t));
@@ -647,7 +644,6 @@ int main(int argc, char **argv) {
             fprintf(stderr, "Could not compute kmers on ref. Error: %d\n", ret);
             exit(-1);
           }
-
         } else {
           fprintf(stdout, "[WARNING] Zero blocks for ref words\n");
         }
@@ -678,6 +674,9 @@ int main(int argc, char **argv) {
           exit(-1);
         }
 
+        // TODO
+        // #pragma omp atomic capture
+        // device_pos_in_ref = (pos_in_ref += words_at_once);
         pos_in_ref += words_at_once;
 
 #ifdef SHOWTIME
@@ -1193,7 +1192,7 @@ int main(int argc, char **argv) {
         time_seconds = 0;
         time_nanoseconds = 0;
 #endif
-      }
+      } // end forward reference query processing
 
 // TODO: use separate variables for ref and reverse-compliment to remove this barrier
 #pragma omp barrier
@@ -1304,6 +1303,9 @@ int main(int argc, char **argv) {
 
         // Increment position
         pos_in_ref += words_at_once;
+        // TODO
+        // #pragma omp atomic capture
+        // device_pos_in_reverse_ref = (pos_in_reverse_ref += words_at_once);
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -1590,7 +1592,7 @@ int main(int argc, char **argv) {
 #ifdef SHOWTIME
           fprintf(stdout, "[INFO] Max reached sections on reverse = %d out of %" PRIu64 "\n", reached_sections, max_extra_sections);
 #endif
-        }
+        } // end gpuhits else block
 
         if (n_hits_found > max_hits) {
           fprintf(stderr, "Found too many hits on reverse strand (%u). Use a lower factor.\n", n_hits_found);
@@ -1794,13 +1796,13 @@ int main(int argc, char **argv) {
         time_seconds = 0;
         time_nanoseconds = 0;
 #endif
-      }
-    }
+      } // end reverse-complement reference processing
+    } // end parallel-for region
 
     // Restart reference for next query section
     pos_in_ref = 0;
     ++split;
-  }
+  } // end query processing
 
   // Close file where frags are written
   fclose(out);
