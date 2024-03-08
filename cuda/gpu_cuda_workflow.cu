@@ -580,6 +580,11 @@ int main(int argc, char **argv) {
 shared(pos_in_ref)
     for (int device_id = 0; device_id < n_devices; device_id++) {
       cudaSetDevice(device_id);
+      int device_pos_in_ref;  // private instance of pos_in_ref per device
+
+      // TODO: not sure if both the add (RHS) and the write of the old value are atomic
+      #pragma omp atomic capture
+      device_pos_in_ref = (pos_in_ref += words_at_once);
 
       // These definitions are for the processing of hits - reused in reference and query
       // TODO put these in corresponding pinned parts
@@ -589,14 +594,15 @@ shared(pos_in_ref)
       uint64_t *ptr_keys_2;
       uint32_t *ptr_values_2;
 
-      while (pos_in_ref < ref_len) {
+      while (device_pos_in_ref < ref_len) {
         ////////////////////////////////////////////////////////////////////////////////
         // FORWARD strand in the reference
         ////////////////////////////////////////////////////////////////////////////////
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
-        uint32_t items_read_y = MIN(ref_len - pos_in_ref, words_at_once);
+        // uint32_t items_read_y = MIN(ref_len - pos_in_ref, words_at_once);
+        uint32_t items_read_y = MIN(ref_len - device_pos_in_ref, words_at_once);
 
         // ## POINTER SECTION 3
         ptr_seq_dev_mem = &data_mem[0];
@@ -625,7 +631,8 @@ shared(pos_in_ref)
         address_checker = realign_address(address_checker + words_at_once * sizeof(uint32_t), 256);
 
         // Load sequence chunk into ram
-        ret = cudaMemcpy(ptr_seq_dev_mem, &ref_seq_host[pos_in_ref], items_read_y, cudaMemcpyHostToDevice);
+        // ret = cudaMemcpy(ptr_seq_dev_mem, &ref_seq_host[pos_in_ref], items_read_y, cudaMemcpyHostToDevice);
+        ret = cudaMemcpy(ptr_seq_dev_mem, &ref_seq_host[device_pos_in_ref], items_read_y, cudaMemcpyHostToDevice);
         if (ret != cudaSuccess) {
           fprintf(stderr, "Could not copy ref sequence to device. Error: %d\n", ret);
           exit(-1);
@@ -638,7 +645,8 @@ shared(pos_in_ref)
 
         number_of_blocks = ((items_read_y - KMER_SIZE + 1)) / (64) + 1;
         if (number_of_blocks != 0) {
-          kernel_index_global32<<<number_of_blocks, 64>>>(ptr_keys_2, ptr_values_2, ptr_seq_dev_mem, pos_in_ref, items_read_y);
+          // kernel_index_global32<<<number_of_blocks, 64>>>(ptr_keys_2, ptr_values_2, ptr_seq_dev_mem, pos_in_ref, items_read_y);
+          kernel_index_global32<<<number_of_blocks, 64>>>(ptr_keys_2, ptr_values_2, ptr_seq_dev_mem, device_pos_in_ref, items_read_y);
           ret = cudaDeviceSynchronize();
           if (ret != cudaSuccess) {
             fprintf(stderr, "Could not compute kmers on ref. Error: %d\n", ret);
@@ -674,10 +682,9 @@ shared(pos_in_ref)
           exit(-1);
         }
 
-        // TODO
-        // #pragma omp atomic capture
-        // device_pos_in_ref = (pos_in_ref += words_at_once);
-        pos_in_ref += words_at_once;
+        #pragma omp atomic capture
+        device_pos_in_ref = (pos_in_ref += words_at_once);
+        // pos_in_ref += words_at_once;
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -1110,7 +1117,8 @@ shared(pos_in_ref)
           fprintf(stderr, "Could not copy query sequence to device for frags. Error: %d\n", ret);
           exit(-1);
         }
-        ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_seq_host[pos_in_ref - words_at_once], MIN(ref_len - (pos_in_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice);
+        // ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_seq_host[pos_in_ref - words_at_once], MIN(ref_len - (pos_in_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice);
+        ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_seq_host[device_pos_in_ref - words_at_once], MIN(ref_len - (device_pos_in_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice);
         if (ret != cudaSuccess) {
           fprintf(stderr, "Could not copy ref sequence to device for frags. Error: %d\n", ret);
           exit(-1);
@@ -1140,9 +1148,12 @@ shared(pos_in_ref)
         number_of_blocks = (n_hits_kept / n_frags_per_block) + 1;
 
         if (number_of_blocks != 0) {
+          // kernel_frags_forward_register<<<number_of_blocks, 32>>>(ptr_device_filt_hits_x, ptr_device_filt_hits_y, ptr_left_offset,
+          //                                                         ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, pos_in_ref - words_at_once,
+          //                                                         MIN(pos_in_query, query_len), MIN(pos_in_ref, ref_len), n_hits_kept, n_frags_per_block);
           kernel_frags_forward_register<<<number_of_blocks, 32>>>(ptr_device_filt_hits_x, ptr_device_filt_hits_y, ptr_left_offset,
-                                                                  ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, pos_in_ref - words_at_once,
-                                                                  MIN(pos_in_query, query_len), MIN(pos_in_ref, ref_len), n_hits_kept, n_frags_per_block);
+                                                                  ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, device_pos_in_ref - words_at_once,
+                                                                  MIN(pos_in_query, query_len), MIN(device_pos_in_ref, ref_len), n_hits_kept, n_frags_per_block);
 
           ret = cudaDeviceSynchronize();
           if (ret != cudaSuccess) {
@@ -1195,6 +1206,9 @@ shared(pos_in_ref)
       } // end forward reference query processing
 
 // TODO: use separate variables for ref and reverse-compliment to remove this barrier
+// or use omp tasks or something to dynamically assign threads to each section
+// or make each while loop a #pragma-omp-for nested inside a shared #pragma-omp-parallel
+// or simply rename the pos_in_ref below to its own shared variable: pos_in_reverse_ref
 #pragma omp barrier
 
       ////////////////////////////////////////////////////////////////////////////////
