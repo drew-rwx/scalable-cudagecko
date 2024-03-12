@@ -43,6 +43,8 @@ int main(int argc, char **argv) {
   ////////////////////////////////////////////////////////////////////////////////
   // Get info of devices
   ////////////////////////////////////////////////////////////////////////////////
+  // TODO: get info for each device, and allocate memory according to the MIN device.totalGlobalmem of all active devices
+  // for now, each device should allocate the same amount of memory
 
   int ret_num_devices;
   int ret;
@@ -99,6 +101,10 @@ int main(int argc, char **argv) {
   if (factor < 0)  // Only if left by default
     factor = factor_chooser(global_device_RAM);
 
+  // TODO: a matrix of data_mems, per device
+  // any memcpy needs to be in a loop that does the same thing for all devices
+  // Async versions of calls? so we can do all memcpys at the same time (cudaSynchronizeDevices() after the loop)
+
   // We will do the one-time alloc here
   // i.e. allocate a pool once and used it manually
   char *data_mem;
@@ -115,6 +121,7 @@ int main(int argc, char **argv) {
   uint64_t max_hits = (effective_global_ram - bytes_for_words - words_at_once) / (2 * 8);  // Max hits must fit twice because of the sorting
   uint64_t bytes_to_subtract = max_hits * 8;
 
+  // TODO: cudaMalloc for each device? the global pool (data_mem) is all device memory in one pointer, I think
   // Allocate the pool
   ret = cudaMalloc(&data_mem, (effective_global_ram) * sizeof(char));
   if (ret != cudaSuccess) {
@@ -153,6 +160,11 @@ int main(int argc, char **argv) {
 #ifdef SHOWTIME
   clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
+
+  /////////////////////////////////////
+  // LOAD QUERY AND REF FASTA FILES
+  /////////////////////////////////////
+  // TODO: only needs to be done once for the host (#pragma omp single?)
 
   // Load faster
   fseek(query, 0L, SEEK_END);
