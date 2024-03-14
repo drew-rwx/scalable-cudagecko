@@ -5,10 +5,13 @@
 // #include "cub/cub.cuh"
 #include <cuda_profiler_api.h>
 #include <omp.h>
+#include <limits>
 
 #include <moderngpu/kernel_mergesort.hxx>
 
 #define BILLION 1000 * 1000 * 1000;
+
+#define DEBUG_PRINT true
 
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
@@ -33,9 +36,8 @@ int main(int argc, char **argv) {
   uint64_t _u64_SPLITHITS = 1;
   uint64_t global_device_RAM = 0;
   float _f_SECTIONS = 0.75;
-  unsigned selected_device = 0;
   FILE *query = NULL, *ref = NULL, *out = NULL;
-  init_args(argc, argv, &query, &selected_device, &ref, &out, &min_length, &fast, &max_frequency, &factor, &n_frags_per_block, &_u64_SPLITHITS, &_f_SECTIONS, &global_device_RAM);
+  init_args(argc, argv, &query, &ref, &out, &min_length, &fast, &max_frequency, &factor, &n_frags_per_block, &_u64_SPLITHITS, &_f_SECTIONS, &global_device_RAM);
 
   if (fast == 3)
     fprintf(stdout, "[INFO] Using AVX512 intrinsics to compute vector hits.\n");
@@ -45,6 +47,12 @@ int main(int argc, char **argv) {
   ////////////////////////////////////////////////////////////////////////////////
   // TODO: get info for each device, and allocate memory according to the MIN device.totalGlobalmem of all active devices
   // for now, each device should allocate the same amount of memory
+  //
+  // Andrew: So far, I am looping through the devices and using the smallest device memory from that.
+  // However, there are other variables per device that we need to think about. Shouldn't be that bad but
+  // I am pushing what I have right now.
+  //
+  // Also, I removed the -dev flag from the command line args.
 
   int ret_num_devices;
   int ret;
@@ -58,6 +66,7 @@ int main(int argc, char **argv) {
   }
 
   cudaDeviceProp device;
+  uint64_t smallest_device_mem = std::numeric_limits<uint64_t>::max();
 
   for (i = 0; i < ret_num_devices; i++) {
     if (cudaSuccess != (ret = cudaGetDeviceProperties(&device, i))) {
@@ -67,9 +76,14 @@ int main(int argc, char **argv) {
     fprintf(stdout, "\tDevice [%" PRIu32 "]: %s\n", i, device.name);
     uint64_t ram = device.totalGlobalMem;
     fprintf(stdout, "\t\tGlobal mem   : %" PRIu64 " (%" PRIu64 " MB)\n", ram, ram / (1024 * 1024));
+
+    if (ram < smallest_device_mem) {
+      smallest_device_mem = ram;
+    }
   }
 
-  if (cudaSuccess != (ret = cudaSetDevice(selected_device))) {
+  // multi-gpu: NOTE cudaSetDevice() is called here, make sure we call it appropriately later on
+  /* if (cudaSuccess != (ret = cudaSetDevice(selected_device))) {
     fprintf(stderr, "Failed to get cuda device property: %d\n", ret);
     exit(-1);
   }
@@ -78,11 +92,16 @@ int main(int argc, char **argv) {
   if (cudaSuccess != (ret = cudaGetDeviceProperties(&device, selected_device))) {
     fprintf(stderr, "Failed to get cuda device property: %d\n", ret);
     exit(-1);
-  }
+  } */
 
   // If no amount of max memory was specified by the user:
   if (global_device_RAM == 0)
-    global_device_RAM = device.totalGlobalMem;
+    global_device_RAM = smallest_device_mem;
+
+  fprintf(stdout, "[INFO] Using global_device_RAM = %" PRIu64 " (%" PRIu64 " MB)\n", global_device_RAM, global_device_RAM / (1024 * 1024));
+
+  if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Quitting before selecting blocks...\n");
+  exit(-1);
 
   // Select blocks
   uint32_t insider_kernel_blocks = (uint32_t)device.multiProcessorCount * (uint32_t)(device.sharedMemPerBlock / 768);  // 768 b is how much shared memory is used by hits kernel
@@ -161,6 +180,8 @@ int main(int argc, char **argv) {
   clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
+  if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Quitting before reading in query and reference files...\n");
+  exit(0);
   /////////////////////////////////////
   // LOAD QUERY AND REF FASTA FILES
   /////////////////////////////////////
@@ -588,14 +609,14 @@ int main(int argc, char **argv) {
 
     // TODO: precompute a shared worklist, or use atomic adds to increment pos_in_ref (and pos_in_reverse_ref)
     const int n_devices = 1;  // TODO: query number of GPUs, or add a command-line arg to specify which GPUs to use (not sure what works best for TACC)
-#pragma omp parallel for num_threads(n_devices) default(none) \
+// #pragma omp parallel for num_threads(n_devices) default(none) \
 shared(pos_in_ref)
     for (int device_id = 0; device_id < n_devices; device_id++) {
       cudaSetDevice(device_id);
       int device_pos_in_ref;  // private instance of pos_in_ref per device
 
       // TODO: not sure if both the add (RHS) and the write of the old value are atomic
-      #pragma omp atomic capture
+      // #pragma omp atomic capture
       device_pos_in_ref = (pos_in_ref += words_at_once);
 
       // These definitions are for the processing of hits - reused in reference and query
@@ -694,7 +715,7 @@ shared(pos_in_ref)
           exit(-1);
         }
 
-        #pragma omp atomic capture
+        // #pragma omp atomic capture
         device_pos_in_ref = (pos_in_ref += words_at_once);
         // pos_in_ref += words_at_once;
 
@@ -1221,7 +1242,7 @@ shared(pos_in_ref)
 // or use omp tasks or something to dynamically assign threads to each section
 // or make each while loop a #pragma-omp-for nested inside a shared #pragma-omp-parallel
 // or simply rename the pos_in_ref below to its own shared variable: pos_in_reverse_ref
-#pragma omp barrier
+// #pragma omp barrier
 
       ////////////////////////////////////////////////////////////////////////////////
       // This concludes the execution for the forward strand

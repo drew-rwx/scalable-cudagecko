@@ -588,7 +588,7 @@ void read_kmers(uint64_t query_l, char * seq_x, uint64_t * keys_x, uint64_t * va
     }
 }
 
-void init_args(int argc, char ** av, FILE ** query, unsigned * selected_device, FILE ** ref, FILE ** out, uint32_t * min_length, int * fast,
+void init_args(int argc, char ** av, FILE ** query, FILE ** ref, FILE ** out, uint32_t * min_length, int * fast,
      uint32_t * max_frequency, float * factor, uint32_t * n_frags_per_block, uint64_t * _u64_SPLITHITS, float * _f_SECTIONS, uint64_t * max_ram){
     
     int pNum = 0;
@@ -626,11 +626,12 @@ void init_args(int argc, char ** av, FILE ** query, unsigned * selected_device, 
             if(*ref==NULL){ fprintf(stderr, "Could not open reference file\n"); exit(-1); }
             p2 = get_basename(av[pNum+1]);
         }
-
-        if(strcmp(av[pNum], "-dev") == 0){
+        
+        // multi-gpu: use CUDA_VISIBLE_DEVICES env variable instead
+        /* if(strcmp(av[pNum], "-dev") == 0){
             *selected_device = (unsigned) atoi(av[pNum+1]);
             if(atoi(av[pNum+1]) < 0) { fprintf(stderr, "Device must be >0\n"); exit(-1); }
-        }
+        } */
 
         if(strcmp(av[pNum], "-seeds_pb") == 0){
             *n_frags_per_block = (uint32_t) atoi(av[pNum+1]);
