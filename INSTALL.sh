@@ -4,7 +4,8 @@
 
 INSTALLDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-make all -C $INSTALLDIR/cpu
 make all -C $INSTALLDIR/cuda
-make all -C $INSTALLDIR/opencl
+
+# make all -C $INSTALLDIR/cpu
+# make all -C $INSTALLDIR/opencl
 
