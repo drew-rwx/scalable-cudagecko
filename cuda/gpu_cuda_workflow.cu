@@ -127,6 +127,8 @@ int main(int argc, char **argv) {
   // We will do the one-time alloc here
   // i.e. allocate a pool once and used it manually
   char *data_mem;
+  // char **data_mem;
+  // *data_mem = malloc(ret_num_devices * char_t); // addr per device
 
   // One workload depends on number of words (words + sortwords + generate hits)
   // The other one depends on number of hits (sort hits + filterhits + frags)
@@ -140,7 +142,14 @@ int main(int argc, char **argv) {
   uint64_t max_hits = (effective_global_ram - bytes_for_words - words_at_once) / (2 * 8);  // Max hits must fit twice because of the sorting
   uint64_t bytes_to_subtract = max_hits * 8;
 
-  // TODO: cudaMalloc for each device? the global pool (data_mem) is all device memory in one pointer, I think
+  // TODO: cudaMalloc for each device? the global pool (data_mem) is all device memory in one pointer, so we can just do that four times
+  // then any future pointer definitions will have to be done for each device
+  /*
+  for (int device_id = 0; device_id < ret_num_devices; i++) {
+    cudaMallocAsync(&data_mem[device_id], (effective_global_ram) * sizeof(char), hStream?);  // TODO: cudaStream_t arg?
+  }
+  */
+
   // Allocate the pool
   ret = cudaMalloc(&data_mem, (effective_global_ram) * sizeof(char));
   if (ret != cudaSuccess) {
