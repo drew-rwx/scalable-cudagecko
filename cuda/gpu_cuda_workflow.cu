@@ -495,7 +495,7 @@ int main(int argc, char **argv) {
 #endif
 
   int split = 0;
-  uint32_t pos_in_query = 0, pos_in_ref = 0;
+  uint32_t pos_in_query = 0, pos_in_ref = 0, pos_in_reverse_ref = 0;
 
   while (pos_in_query < query_len) {
 #ifdef SHOWTIME
@@ -607,16 +607,13 @@ int main(int argc, char **argv) {
     // Run the reference blocks
     ////////////////////////////////////////////////////////////////////////////////
 
-    // TODO: precompute a shared worklist, or use atomic adds to increment pos_in_ref (and pos_in_reverse_ref)
-    const int n_devices = 1;  // TODO: query number of GPUs, or add a command-line arg to specify which GPUs to use (not sure what works best for TACC)
-// #pragma omp parallel for num_threads(n_devices) default(none) \
-shared(pos_in_ref)
-    for (int device_id = 0; device_id < n_devices; device_id++) {
+#pragma omp parallel for num_threads(ret_num_devices) default(shared) \
+private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
+    for (int device_id = 0; device_id < ret_num_devices; device_id++) {
       cudaSetDevice(device_id);
       int device_pos_in_ref;  // private instance of pos_in_ref per device
 
-      // TODO: not sure if both the add (RHS) and the write of the old value are atomic
-      // #pragma omp atomic capture
+      #pragma omp atomic capture
       device_pos_in_ref = (pos_in_ref += words_at_once);
 
       // These definitions are for the processing of hits - reused in reference and query
@@ -715,7 +712,7 @@ shared(pos_in_ref)
           exit(-1);
         }
 
-        // #pragma omp atomic capture
+        #pragma omp atomic capture
         device_pos_in_ref = (pos_in_ref += words_at_once);
         // pos_in_ref += words_at_once;
 
@@ -1238,25 +1235,21 @@ shared(pos_in_ref)
 #endif
       } // end forward reference query processing
 
-// TODO: use separate variables for ref and reverse-compliment to remove this barrier
-// or use omp tasks or something to dynamically assign threads to each section
-// or make each while loop a #pragma-omp-for nested inside a shared #pragma-omp-parallel
-// or simply rename the pos_in_ref below to its own shared variable: pos_in_reverse_ref
-// #pragma omp barrier
-
       ////////////////////////////////////////////////////////////////////////////////
       // This concludes the execution for the forward strand
       // Now we perform the same operations but in reverse
       ////////////////////////////////////////////////////////////////////////////////
 
-      // Restart the reference for every block in query
-      pos_in_ref = 0;
-
       ////////////////////////////////////////////////////////////////////////////////
       // Run the reference blocks BUT REVERSED !
       ////////////////////////////////////////////////////////////////////////////////
 
-      while (pos_in_ref < ref_len) {
+      int device_pos_in_reverse_ref = 0;  // private instance of pos_in_reverse_ref per device
+
+      #pragma omp atomic capture
+      device_pos_in_reverse_ref = (pos_in_reverse_ref += words_at_once);  // each device starts on its own subsequence
+
+      while (device_pos_in_reverse_ref < ref_len) {
         ////////////////////////////////////////////////////////////////////////////////
         // FORWARD strand in the reference BUT REVERSED !
         ////////////////////////////////////////////////////////////////////////////////
@@ -1264,7 +1257,7 @@ shared(pos_in_ref)
         // In case some was overwritten during hits generation
         ret = cudaMemset(base_ptr, 0xFFFFFFFF, (words_at_once - items_read_x) * sizeof(char));
 
-        uint32_t items_read_y = MIN(ref_len - pos_in_ref, words_at_once);
+        uint32_t items_read_y = MIN(ref_len - device_pos_in_reverse_ref, words_at_once);
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_start);
@@ -1282,7 +1275,7 @@ shared(pos_in_ref)
         address_checker = realign_address(address_checker + words_at_once * sizeof(uint32_t), 128);
 
         // Load sequence chunk into ram
-        ret = cudaMemcpy(ptr_seq_dev_mem, &ref_rev_seq_host[pos_in_ref], items_read_y, cudaMemcpyHostToDevice);
+        ret = cudaMemcpy(ptr_seq_dev_mem, &ref_rev_seq_host[device_pos_in_reverse_ref], items_read_y, cudaMemcpyHostToDevice);
         if (ret != cudaSuccess) {
           fprintf(stderr, "Could not copy ref sequence to device reversed. Error: %d\n", ret);
           exit(-1);
@@ -1311,7 +1304,7 @@ shared(pos_in_ref)
         number_of_blocks = ((items_read_y - KMER_SIZE + 1)) / 64 + 1;
 
         if (number_of_blocks != 0) {
-          kernel_index_global32<<<number_of_blocks, 64>>>(ptr_keys_2, ptr_values_2, ptr_seq_dev_mem, pos_in_ref, items_read_y);
+          kernel_index_global32<<<number_of_blocks, 64>>>(ptr_keys_2, ptr_values_2, ptr_seq_dev_mem, device_pos_in_reverse_ref, items_read_y);
           ret = cudaDeviceSynchronize();
           if (ret != cudaSuccess) {
             fprintf(stderr, "Could not compute kmers on ref reversed. Error: %d\n", ret);
@@ -1349,10 +1342,8 @@ shared(pos_in_ref)
         }
 
         // Increment position
-        pos_in_ref += words_at_once;
-        // TODO
-        // #pragma omp atomic capture
-        // device_pos_in_reverse_ref = (pos_in_reverse_ref += words_at_once);
+        #pragma omp atomic capture
+        device_pos_in_reverse_ref = (pos_in_reverse_ref += words_at_once);
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -1654,7 +1645,7 @@ shared(pos_in_ref)
         fprintf(stdout, "[INFO] hits Q-RC t= %" PRIu64 " ns\n", time_seconds + time_nanoseconds);
         time_seconds = 0;
         time_nanoseconds = 0;
-        fprintf(stdout, "[INFO] Generated %" PRIu32 " hits on reversed split %d -> (%d%%)[%u,%u]{%u,%u}\n", n_hits_found, split, (int)((100 * MIN((uint64_t)pos_in_ref, (uint64_t)ref_len)) / (uint64_t)ref_len), pos_in_query, pos_in_ref, items_read_x, items_read_y);
+        fprintf(stdout, "[INFO] Generated %" PRIu32 " hits on reversed split %d -> (%d%%)[%u,%u]{%u,%u}\n", n_hits_found, split, (int)((100 * MIN((uint64_t)device_pos_in_reverse_ref, (uint64_t)ref_len)) / (uint64_t)ref_len), pos_in_query, device_pos_in_reverse_ref, items_read_x, items_read_y);
 #endif
 
         ////////////////////////////////////////////////////////////////////////////////
@@ -1767,7 +1758,7 @@ shared(pos_in_ref)
           fprintf(stderr, "Could not copy query sequence to device for frags. Error: %d\n", ret);
           exit(-1);
         }
-        ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_rev_seq_host[pos_in_ref - words_at_once], MIN(ref_len - (pos_in_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice);
+        ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_rev_seq_host[device_pos_in_reverse_ref - words_at_once], MIN(ref_len - (device_pos_in_reverse_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice);
         if (ret != cudaSuccess) {
           fprintf(stderr, "Could not copy ref sequence to device for frags. Error: %d\n", ret);
           exit(-1);
@@ -1799,7 +1790,7 @@ shared(pos_in_ref)
 
         if (number_of_blocks != 0) {
           // Plot twist: its the same kernel for forward and reverse since sequence is completely reversed
-          kernel_frags_forward_register<<<number_of_blocks, 32>>>(ptr_device_filt_hits_x, ptr_device_filt_hits_y, ptr_left_offset, ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, pos_in_ref - words_at_once, MIN(pos_in_query, query_len), MIN(pos_in_ref, ref_len), n_hits_kept, n_frags_per_block);
+          kernel_frags_forward_register<<<number_of_blocks, 32>>>(ptr_device_filt_hits_x, ptr_device_filt_hits_y, ptr_left_offset, ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, device_pos_in_reverse_ref - words_at_once, MIN(pos_in_query, query_len), MIN(device_pos_in_reverse_ref, ref_len), n_hits_kept, n_frags_per_block);
           ret = cudaDeviceSynchronize();
           if (ret != cudaSuccess) {
             fprintf(stderr, "Failed on generating forward frags. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
@@ -1847,7 +1838,7 @@ shared(pos_in_ref)
     } // end parallel-for region
 
     // Restart reference for next query section
-    pos_in_ref = 0;
+    pos_in_ref = 0;  // TODO
     ++split;
   } // end query processing
 
