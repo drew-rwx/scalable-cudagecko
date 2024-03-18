@@ -24,6 +24,10 @@ void build_frag(uint32_t * xStart, uint32_t * xEnd, uint32_t * yStart, uint32_t 
     *curr_l = *xEnd - *xStart;
 }
 
+/**
+ * writes frag results to an outfile (final output of the computations)
+ * TODO: how to ensure this is parallel-safe? do we need to perform some kind of reduction first?
+*/
 void filter_and_write_frags(uint32_t * filtered_hits_x, uint32_t * filtered_hits_y, uint32_t * host_left_offset, 
     uint32_t * host_right_offset, uint32_t n_frags, FILE * out, char strand, uint32_t ref_len, uint32_t min_length){
 

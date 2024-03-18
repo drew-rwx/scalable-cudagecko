@@ -120,15 +120,13 @@ int main(int argc, char **argv) {
   if (factor < 0)  // Only if left by default
     factor = factor_chooser(global_device_RAM);
 
-  // TODO: a matrix of data_mems, per device
-  // any memcpy needs to be in a loop that does the same thing for all devices
-  // Async versions of calls? so we can do all memcpys at the same time (cudaSynchronizeDevices() after the loop)
+  // TODO: define streams for each cuda device?
+  // cudaStream_t cuda_streams[ret_num_devices];
+  // for (int i = 0; i < ret_num_devices; i++) cudaStreamCreate(&cuda_streams[i]);
 
   // We will do the one-time alloc here
-  // i.e. allocate a pool once and used it manually
-  char *data_mem;
-  // char **data_mem;
-  // *data_mem = malloc(ret_num_devices * char_t); // addr per device
+  // i.e. allocate a pool once (for each device) and used it manually
+  char *data_mem[ret_num_devices];
 
   // One workload depends on number of words (words + sortwords + generate hits)
   // The other one depends on number of hits (sort hits + filterhits + frags)
@@ -142,24 +140,33 @@ int main(int argc, char **argv) {
   uint64_t max_hits = (effective_global_ram - bytes_for_words - words_at_once) / (2 * 8);  // Max hits must fit twice because of the sorting
   uint64_t bytes_to_subtract = max_hits * 8;
 
-  // TODO: cudaMalloc for each device? the global pool (data_mem) is all device memory in one pointer, so we can just do that four times
-  // then any future pointer definitions will have to be done for each device
-  /*
-  for (int device_id = 0; device_id < ret_num_devices; i++) {
-    cudaMallocAsync(&data_mem[device_id], (effective_global_ram) * sizeof(char), hStream?);  // TODO: cudaStream_t arg?
-  }
-  */
-
-  // Allocate the pool
-  ret = cudaMalloc(&data_mem, (effective_global_ram) * sizeof(char));
-  if (ret != cudaSuccess) {
-    fprintf(stderr, "Could not allocate pool memory in device. Error: %d\n", ret);
-    exit(-1);
-  }
-  fprintf(stdout, "[INFO] Memory pool at %p of size %lu bytes\n", data_mem, (effective_global_ram) * sizeof(char));
-
   // Reserve a slice for the pre allocated pool for moderngpu (and for other things as well while it is not used)
-  char *pre_alloc = &data_mem[effective_global_ram - bytes_to_subtract];  // points to the last section of the big pool
+  char *pre_alloc;
+
+  // Allocate the pools
+  // TODO: Async seems to only have benefits when running many different jobs on one GPU and attempting to hide latencies
+  // Brandon: using omp for now
+  #pragma omp parallel for num_threads(ret_num_devices) default(shared)
+  for (int device_id = 0; device_id < ret_num_devices; i++) {
+    cudaSetDevice(device_id);
+    ret = cudaMalloc(&data_mem[device_id], (effective_global_ram) * sizeof(char));
+    // cudaMallocAsync(&data_mem[device_id], (effective_global_ram) * sizeof(char), cuda_streams[device_id]);
+    if (ret != cudaSuccess) {
+      fprintf(stderr, "Could not allocate pool memory in device. Error: %d\n", ret);
+      exit(-1);
+    }
+    fprintf(stdout, "[INFO] Memory pool at %p of size %lu bytes\n", data_mem, (effective_global_ram) * sizeof(char));
+
+    pre_alloc = &data_mem[device_id][effective_global_ram - bytes_to_subtract];  // points to the last section of the big pool
+  }
+  // ret = cudaMalloc(&data_mem, (effective_global_ram) * sizeof(char));
+  // if (ret != cudaSuccess) {
+  //   fprintf(stderr, "Could not allocate pool memory in device. Error: %d\n", ret);
+  //   exit(-1);
+  // }
+  // fprintf(stdout, "[INFO] Memory pool at %p of size %lu bytes\n", data_mem, (effective_global_ram) * sizeof(char));
+  // // Reserve a slice for the pre allocated pool for moderngpu (and for other things as well while it is not used)
+  // char *pre_alloc = &data_mem[effective_global_ram - bytes_to_subtract];  // points to the last section of the big pool
 
   fprintf(stdout, "[INFO] You can have %" PRIu64 " MB for words (i.e. %" PRIu64 " words), and %" PRIu64 " MB for hits (i.e. %" PRIu64 " hits)\n",
           bytes_for_words / (1024 * 1024), words_at_once, (effective_global_ram - bytes_for_words - words_at_once) / (1024 * 1024), max_hits);
@@ -194,7 +201,6 @@ int main(int argc, char **argv) {
   /////////////////////////////////////
   // LOAD QUERY AND REF FASTA FILES
   /////////////////////////////////////
-  // TODO: only needs to be done once for the host (#pragma omp single?)
 
   // Load faster
   fseek(query, 0L, SEEK_END);
@@ -1231,6 +1237,10 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
         clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
+        // TODO: ensure this is parallel-safe, since each device will be writing to the same file
+        // reduction and single-writer? (probably too complex)
+        // critical section to file? (probably this, need to verify if output is dependent on other devices, though)
+        // or, everyone writes to individual files, then we concatenate the files at the end (ensures ordering)
         filter_and_write_frags(filtered_hits_x, filtered_hits_y, host_left_offset, host_right_offset, n_hits_kept, out, 'f', ref_len, min_length);
 
 #ifdef SHOWTIME
