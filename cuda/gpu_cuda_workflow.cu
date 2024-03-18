@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
   uint64_t bytes_to_subtract = max_hits * 8;
 
   // Reserve a slice for the pre allocated pool for moderngpu (and for other things as well while it is not used)
-  char *pre_alloc;
+  char *pre_alloc[ret_num_devices];
 
   // Allocate the pools
   // TODO: Async seems to only have benefits when running many different jobs on one GPU and attempting to hide latencies
@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
     }
     fprintf(stdout, "[INFO] Memory pool at %p of size %lu bytes\n", data_mem, (effective_global_ram) * sizeof(char));
 
-    pre_alloc = &data_mem[device_id][effective_global_ram - bytes_to_subtract];  // points to the last section of the big pool
+    pre_alloc[device_id] = &data_mem[device_id][effective_global_ram - bytes_to_subtract];  // points to the last section of the big pool
   }
   // ret = cudaMalloc(&data_mem, (effective_global_ram) * sizeof(char));
   // if (ret != cudaSuccess) {
