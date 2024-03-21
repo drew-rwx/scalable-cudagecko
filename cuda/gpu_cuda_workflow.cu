@@ -67,6 +67,7 @@ int main(int argc, char **argv) {
 
   cudaDeviceProp device;
   uint64_t smallest_device_mem = std::numeric_limits<uint64_t>::max();
+  int smallest_device_idx;
 
   for (i = 0; i < ret_num_devices; i++) {
     if (cudaSuccess != (ret = cudaGetDeviceProperties(&device, i))) {
@@ -79,6 +80,7 @@ int main(int argc, char **argv) {
 
     if (ram < smallest_device_mem) {
       smallest_device_mem = ram;
+      smallest_device_idx = i;
     }
   }
 
@@ -92,16 +94,19 @@ int main(int argc, char **argv) {
   if (cudaSuccess != (ret = cudaGetDeviceProperties(&device, selected_device))) {
     fprintf(stderr, "Failed to get cuda device property: %d\n", ret);
     exit(-1);
-  } */
+  }*/
+
+  // Use the device with the least amount of memory as the main one, may cause issues later
+  if (cudaSuccess != (ret = cudaGetDeviceProperties(&device, smallest_device_idx))) {
+    fprintf(stderr, "Failed to get cuda device property: %d\n", ret);
+    exit(-1);
+  }
 
   // If no amount of max memory was specified by the user:
   if (global_device_RAM == 0)
     global_device_RAM = smallest_device_mem;
 
   fprintf(stdout, "[INFO] Using global_device_RAM = %" PRIu64 " (%" PRIu64 " MB)\n", global_device_RAM, global_device_RAM / (1024 * 1024));
-
-  if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Quitting before selecting blocks...\n");
-  exit(-1);
 
   // Select blocks
   uint32_t insider_kernel_blocks = (uint32_t)device.multiProcessorCount * (uint32_t)(device.sharedMemPerBlock / 768);  // 768 b is how much shared memory is used by hits kernel
@@ -182,6 +187,7 @@ int main(int argc, char **argv) {
     fprintf(stdout, "[INFO] Running on sensitive mode (full execution on GPU[mf:%" PRIu32 "])\n", max_frequency);
 
   // Assign memory pool to moderngpu
+  // ATODO : We will need to have a mptr for each device and a context for each device
   Mem_pool mptr;
   mptr.mem_ptr = pre_alloc;
   mptr.address = 0;
