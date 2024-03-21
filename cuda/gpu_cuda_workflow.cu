@@ -186,13 +186,31 @@ int main(int argc, char **argv) {
   else
     fprintf(stdout, "[INFO] Running on sensitive mode (full execution on GPU[mf:%" PRIu32 "])\n", max_frequency);
 
+  //
   // Assign memory pool to moderngpu
-  // ATODO : We will need to have a mptr for each device and a context for each device
-  Mem_pool mptr;
-  mptr.mem_ptr = pre_alloc;
-  mptr.address = 0;
-  mptr.limit = bytes_to_subtract;
-  mgpu::standard_context_t context(false, 0, &mptr);
+  //
+
+  // Create a memory pool for each device
+  Mem_pool mptrs[ret_num_devices];
+
+  #pragma omp parallel for num_threads(ret_num_devices) default(shared)
+  for (int device_id = 0; device_id < ret_num_devices; i++) {
+    cudaSetDevice(device_id);
+
+    mptrs[device_id].mem_ptr = pre_alloc[device_id];
+    mptrs[device_id].address = 0;
+    mptrs[device_id].limit = bytes_to_subtract;
+  }
+
+  // Because standard_context_t cannot be copied, we must create a vector to deal with the memory instead of an array
+  std::vector<mgpu::standard_context_t> contexts;
+  contexts.reserve(ret_num_devices);
+
+  // Must be done sequentially
+  for (int device_id = 0; device_id < ret_num_devices; i++) {
+    // multi-gpu :: might need to set the correct stream, refer to moderngpu/src/moderngpu/context.hxx line 106
+    contexts.push_back({false, 0, &mptrs[device_id]});
+  }
 
   // Set working sizes (these will change throughout execution)
   size_t threads_number = 32;
