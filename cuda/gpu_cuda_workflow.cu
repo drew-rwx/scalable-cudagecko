@@ -152,7 +152,7 @@ int main(int argc, char **argv) {
 // TODO: Async seems to only have benefits when running many different jobs on one GPU and attempting to hide latencies
 // Brandon: using omp for now
 #pragma omp parallel for num_threads(ret_num_devices) default(shared)
-  for (int device_id = 0; device_id < ret_num_devices; i++) {
+  for (int device_id = 0; device_id < ret_num_devices; device_id++) {
     cudaSetDevice(device_id);
     ret = cudaMalloc(&data_mem[device_id], (effective_global_ram) * sizeof(char));
     // cudaMallocAsync(&data_mem[device_id], (effective_global_ram) * sizeof(char), cuda_streams[device_id]);
@@ -190,7 +190,13 @@ int main(int argc, char **argv) {
   // Assign memory pool to moderngpu
   //
 
-  // Create a memory pool for each device
+  Mem_pool mptr;
+  mptr.mem_ptr = pre_alloc[0];
+  mptr.address = 0;
+  mptr.limit = bytes_to_subtract;
+  mgpu::standard_context_t context(false, 0, &mptr);
+
+  /* // Create a memory pool for each device
   Mem_pool mptrs[ret_num_devices];
 
 #pragma omp parallel for num_threads(ret_num_devices) default(shared)
@@ -210,7 +216,7 @@ int main(int argc, char **argv) {
   for (int device_id = 0; device_id < ret_num_devices; i++) {
     // multi-gpu :: might need to set the correct stream, refer to moderngpu/src/moderngpu/context.hxx line 106
     contexts.push_back({false, 0, &mptrs[device_id]});
-  }
+  } */
 
   // Set working sizes (these will change throughout execution)
   size_t threads_number = 32;
@@ -545,7 +551,7 @@ int main(int argc, char **argv) {
 #ifdef SHOWTIME
     clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
-#pragma omp parallel for num_threads(ret_num_devices) default(shared) private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
+#pragma omp parallel for num_threads(ret_num_devices) default(shared) private(ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
     for (int device_id = 0; device_id < ret_num_devices; device_id++) {
       cudaSetDevice(device_id);
 
@@ -619,7 +625,7 @@ int main(int argc, char **argv) {
       clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
-      mergesort(ptr_keys, ptr_values, items_read_x, mgpu::less_t<uint64_t>(), contexts[device_id]);
+      mergesort(ptr_keys, ptr_values, items_read_x, mgpu::less_t<uint64_t>(), context); 
       ret = cudaDeviceSynchronize();
       if (ret != cudaSuccess) {
         fprintf(stderr, "MERGESORT sorting failed on query. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
@@ -658,7 +664,11 @@ int main(int argc, char **argv) {
       int device_pos_in_ref;  // private instance of pos_in_ref per device
 
 #pragma omp atomic capture
-      device_pos_in_ref = (pos_in_ref += words_at_once);
+      {
+        pos_in_ref += words_at_once;
+        device_pos_in_ref = pos_in_ref;
+      }
+      // device_pos_in_ref = (pos_in_ref += words_at_once);
 
       // These definitions are for the processing of hits - reused in reference and query
       // TODO put these in corresponding pinned parts
@@ -748,7 +758,7 @@ int main(int argc, char **argv) {
         clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
-        mergesort(ptr_keys_2, ptr_values_2, items_read_y, mgpu::less_t<uint64_t>(), contexts[device_id]);
+        mergesort(ptr_keys_2, ptr_values_2, items_read_y, mgpu::less_t<uint64_t>(), context);
 
         ret = cudaDeviceSynchronize();
         if (ret != cudaSuccess) {
@@ -757,8 +767,12 @@ int main(int argc, char **argv) {
         }
 
 #pragma omp atomic capture
-        device_pos_in_ref = (pos_in_ref += words_at_once);
-        // pos_in_ref += words_at_once;
+      {
+        pos_in_ref += words_at_once;
+        device_pos_in_ref = pos_in_ref;
+      }
+        /* device_pos_in_ref = (pos_in_ref += words_at_once);
+        // pos_in_ref += words_at_once; */
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -1095,7 +1109,7 @@ int main(int argc, char **argv) {
           }
         }
 
-        mergesort(ptr_device_diagonals, n_hits_found, mgpu::less_t<uint64_t>(), contexts[device_id]);
+        mergesort(ptr_device_diagonals, n_hits_found, mgpu::less_t<uint64_t>(), context);
 
         ret = cudaDeviceSynchronize();
         if (ret != cudaSuccess) {
@@ -1295,7 +1309,11 @@ int main(int argc, char **argv) {
       int device_pos_in_reverse_ref = 0;  // private instance of pos_in_reverse_ref per device
 
 #pragma omp atomic capture
-      device_pos_in_reverse_ref = (pos_in_reverse_ref += words_at_once);  // each device starts on its own subsequence
+      {
+        pos_in_ref += words_at_once;
+        device_pos_in_ref = pos_in_ref;
+      }
+/*       device_pos_in_reverse_ref = (pos_in_reverse_ref += words_at_once);  // each device starts on its own subsequence */
 
       while (device_pos_in_reverse_ref < ref_len) {
         ////////////////////////////////////////////////////////////////////////////////
@@ -1381,7 +1399,7 @@ int main(int argc, char **argv) {
         // ## POINTER SECTION 8
         // Not required anymore
 
-        mergesort(ptr_keys_2, ptr_values_2, items_read_y, mgpu::less_t<uint64_t>(), contexts[device_id]);
+        mergesort(ptr_keys_2, ptr_values_2, items_read_y, mgpu::less_t<uint64_t>(), context);
         ret = cudaDeviceSynchronize();
 
         if (ret != cudaSuccess) {
@@ -1391,7 +1409,11 @@ int main(int argc, char **argv) {
 
 // Increment position
 #pragma omp atomic capture
-        device_pos_in_reverse_ref = (pos_in_reverse_ref += words_at_once);
+      {
+        pos_in_ref += words_at_once;
+        device_pos_in_ref = pos_in_ref;
+      }
+/*         device_pos_in_reverse_ref = (pos_in_reverse_ref += words_at_once); */
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -1717,7 +1739,7 @@ int main(int argc, char **argv) {
           }
         }
 
-        mergesort(ptr_device_diagonals, n_hits_found, mgpu::less_t<uint64_t>(), contexts[device_id]);
+        mergesort(ptr_device_diagonals, n_hits_found, mgpu::less_t<uint64_t>(), context);
         ret = cudaDeviceSynchronize();
         if (ret != cudaSuccess) {
           fprintf(stderr, "MODERNGPU sorting failed on hits rev. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
