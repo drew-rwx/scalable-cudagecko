@@ -355,12 +355,17 @@ int main(int argc, char **argv) {
   free(pro_q_buffer);
   free(pro_r_buffer);
 
+  // TODO: all of this section can probably be done on one GPU for now
+  // however, this encoding (kernel_reverse_complement) could present a major bottleneck 
+  // (but distributing may introduce communication overhead...)
+  // for now, I think we can just leave it alone
   // ## POINTER SECTION 0 [These depict sections of code where the base pointer to the memory pool is changed/used]
   uint64_t address_checker = 0;
 
-  char *ptr_seq_dev_mem_aux = &data_mem[0];
+  // char *ptr_seq_dev_mem_aux = &data_mem[0];
+  char *ptr_seq_dev_mem_aux = &data_mem[0][0];  // just using GPU 0
   address_checker = realign_address(address_checker + ref_len, 128);
-  char *ptr_seq_dev_mem_reverse_aux = &data_mem[address_checker];
+  char *ptr_seq_dev_mem_reverse_aux = &data_mem[0][address_checker];
   address_checker = realign_address(address_checker + ref_len, 4);
 
   char *ptr_reverse_write[n_streams];
