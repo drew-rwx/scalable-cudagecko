@@ -545,116 +545,117 @@ int main(int argc, char **argv) {
 #ifdef SHOWTIME
     clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
-    // ## POINTER SECTION 1
-    address_checker = 0;
-    char *ptr_seq_dev_mem = &data_mem[0];
-    char *base_ptr = ptr_seq_dev_mem;
-    address_checker = realign_address(address_checker + words_at_once, 256);
-
-    uint64_t *ptr_keys = (uint64_t *)(base_ptr + address_checker);  // We have to realign because of the arbitrary length of the sequence chars
-    address_checker = realign_address(address_checker + words_at_once * sizeof(uint64_t), 128);
-
-    uint32_t *ptr_values = (uint32_t *)(base_ptr + address_checker);
-    address_checker = realign_address(address_checker + words_at_once * sizeof(uint32_t), 256);
-    uint64_t address_CHECKPOINT = address_checker;
-
-    fprintf(stdout, "[EXECUTING] Running split %d -> (%d%%)[%u,%u]\n", split, (int)((100 * (uint64_t)pos_in_query) / (uint64_t)query_len), pos_in_query, pos_in_ref);
-
-    uint32_t items_read_x = MIN(query_len - pos_in_query, words_at_once);
-
-    ////////////////////////////////////////////////////////////////////////////////
-    // Run kmers for query
-    ////////////////////////////////////////////////////////////////////////////////
-
-    // Load sequence chunk into ram
-    ret = cudaMemcpy(ptr_seq_dev_mem, &query_seq_host[pos_in_query], items_read_x, cudaMemcpyHostToDevice);
-    if (ret != cudaSuccess) {
-      fprintf(stderr, "Could not copy query sequence to device. Error: %d\n", ret);
-      exit(-1);
-    }
-
-    // Initialize space
-    ret = cudaMemset(ptr_keys, 0xFFFFFFFF, words_at_once * sizeof(uint64_t));
-    ret = cudaMemset(ptr_values, 0xFFFFFFFF, words_at_once * sizeof(uint32_t));
-    ret = cudaDeviceSynchronize();
-
-    number_of_blocks = (items_read_x - KMER_SIZE + 1) / (64) + 1;
-    if (number_of_blocks != 0) {
-      // cudaProfilerStart();
-      kernel_index_global32<<<number_of_blocks, 64>>>(ptr_keys, ptr_values, ptr_seq_dev_mem, pos_in_query, items_read_x);
-      ret = cudaDeviceSynchronize();
-      if (ret != cudaSuccess) {
-        fprintf(stderr, "Could not compute kmers on query. Error: %d\n", ret);
-        exit(-1);
-      }
-    } else {
-      fprintf(stdout, "[WARNING] Zero blocks for query words\n");
-    }
-
-#ifdef SHOWTIME
-    clock_gettime(CLOCK_MONOTONIC, &HD_end);
-    time_seconds += ((uint64_t)HD_end.tv_sec - (uint64_t)HD_start.tv_sec);
-    time_nanoseconds += ((uint64_t)HD_end.tv_nsec - (uint64_t)HD_start.tv_nsec);
-    time_seconds *= BILLION;
-    fprintf(stdout, "[INFO] words Q t= %" PRIu64 " ns\n", time_seconds + time_nanoseconds);
-    time_seconds = 0;
-    time_nanoseconds = 0;
-#endif
-
-    ////////////////////////////////////////////////////////////////////////////////
-    // Sort the query kmers
-    ////////////////////////////////////////////////////////////////////////////////
-
-    // Notice: Now that we are usiung pooled memory
-    // I have not "freed" the part corresponding to the sequence (ptr_seq_dev_mem)
-    // And thus next points build upon that
-    // But thats no problem because it is a small fraction of memory
-
-    // ## POINTER SECTION 2
-#ifdef SHOWTIME
-    clock_gettime(CLOCK_MONOTONIC, &HD_start);
-#endif
-
-    mergesort(ptr_keys, ptr_values, items_read_x, mgpu::less_t<uint64_t>(), context);
-    ret = cudaDeviceSynchronize();
-    if (ret != cudaSuccess) {
-      fprintf(stderr, "MERGESORT sorting failed on query. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
-      exit(-1);
-    }
-
-    // Download sorted kmers [ They will be reuploaded afterwards ]
-    ret = cudaMemcpy(dict_x_keys, ptr_keys, items_read_x * sizeof(uint64_t), cudaMemcpyDeviceToHost);
-    if (ret != cudaSuccess) {
-      fprintf(stderr, "Downloading device kmers (1). Error: %d\n", ret);
-      exit(-1);
-    }
-    ret = cudaMemcpy(dict_x_values, ptr_values, items_read_x * sizeof(uint32_t), cudaMemcpyDeviceToHost);
-    if (ret != cudaSuccess) {
-      fprintf(stderr, "Downloading device kmers (2). Error: %d\n", ret);
-      exit(-1);
-    }
-
-#ifdef SHOWTIME
-    clock_gettime(CLOCK_MONOTONIC, &HD_end);
-    time_seconds += ((uint64_t)HD_end.tv_sec - (uint64_t)HD_start.tv_sec);
-    time_nanoseconds += ((uint64_t)HD_end.tv_nsec - (uint64_t)HD_start.tv_nsec);
-
-    time_seconds *= BILLION;
-    fprintf(stdout, "[INFO] sortwords Q t= %" PRIu64 " ns\n", time_seconds + time_nanoseconds);
-    time_seconds = 0;
-    time_nanoseconds = 0;
-#endif
-
-    pos_in_query += words_at_once;
-
-    ////////////////////////////////////////////////////////////////////////////////
-    // Run the reference blocks
-    ////////////////////////////////////////////////////////////////////////////////
-
 #pragma omp parallel for num_threads(ret_num_devices) default(shared) \
 private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
     for (int device_id = 0; device_id < ret_num_devices; device_id++) {
       cudaSetDevice(device_id);
+
+      // ## POINTER SECTION 1
+      address_checker = 0;
+      char *ptr_seq_dev_mem = &data_mem[device_id][0];
+      char *base_ptr = ptr_seq_dev_mem;
+      address_checker = realign_address(address_checker + words_at_once, 256);
+
+      uint64_t *ptr_keys = (uint64_t *)(base_ptr + address_checker);  // We have to realign because of the arbitrary length of the sequence chars
+      address_checker = realign_address(address_checker + words_at_once * sizeof(uint64_t), 128);
+
+      uint32_t *ptr_values = (uint32_t *)(base_ptr + address_checker);
+      address_checker = realign_address(address_checker + words_at_once * sizeof(uint32_t), 256);
+      uint64_t address_CHECKPOINT = address_checker;
+
+      fprintf(stdout, "[EXECUTING] Running split %d -> (%d%%)[%u,%u]\n", split, (int)((100 * (uint64_t)pos_in_query) / (uint64_t)query_len), pos_in_query, pos_in_ref);
+
+      uint32_t items_read_x = MIN(query_len - pos_in_query, words_at_once);
+
+      ////////////////////////////////////////////////////////////////////////////////
+      // Run kmers for query
+      ////////////////////////////////////////////////////////////////////////////////
+
+      // Load sequence chunk into ram
+      ret = cudaMemcpy(ptr_seq_dev_mem, &query_seq_host[pos_in_query], items_read_x, cudaMemcpyHostToDevice);
+      if (ret != cudaSuccess) {
+        fprintf(stderr, "Could not copy query sequence to device. Error: %d\n", ret);
+        exit(-1);
+      }
+
+      // Initialize space
+      ret = cudaMemset(ptr_keys, 0xFFFFFFFF, words_at_once * sizeof(uint64_t));
+      ret = cudaMemset(ptr_values, 0xFFFFFFFF, words_at_once * sizeof(uint32_t));
+      ret = cudaDeviceSynchronize();
+
+      number_of_blocks = (items_read_x - KMER_SIZE + 1) / (64) + 1;
+      if (number_of_blocks != 0) {
+        // cudaProfilerStart();
+        kernel_index_global32<<<number_of_blocks, 64>>>(ptr_keys, ptr_values, ptr_seq_dev_mem, pos_in_query, items_read_x);
+        ret = cudaDeviceSynchronize();
+        if (ret != cudaSuccess) {
+          fprintf(stderr, "Could not compute kmers on query. Error: %d\n", ret);
+          exit(-1);
+        }
+      } else {
+        fprintf(stdout, "[WARNING] Zero blocks for query words\n");
+      }
+
+  #ifdef SHOWTIME
+      clock_gettime(CLOCK_MONOTONIC, &HD_end);
+      time_seconds += ((uint64_t)HD_end.tv_sec - (uint64_t)HD_start.tv_sec);
+      time_nanoseconds += ((uint64_t)HD_end.tv_nsec - (uint64_t)HD_start.tv_nsec);
+      time_seconds *= BILLION;
+      fprintf(stdout, "[INFO] words Q t= %" PRIu64 " ns\n", time_seconds + time_nanoseconds);
+      time_seconds = 0;
+      time_nanoseconds = 0;
+  #endif
+
+      ////////////////////////////////////////////////////////////////////////////////
+      // Sort the query kmers
+      ////////////////////////////////////////////////////////////////////////////////
+
+      // Notice: Now that we are usiung pooled memory
+      // I have not "freed" the part corresponding to the sequence (ptr_seq_dev_mem)
+      // And thus next points build upon that
+      // But thats no problem because it is a small fraction of memory
+
+      // ## POINTER SECTION 2
+  #ifdef SHOWTIME
+      clock_gettime(CLOCK_MONOTONIC, &HD_start);
+  #endif
+
+      mergesort(ptr_keys, ptr_values, items_read_x, mgpu::less_t<uint64_t>(), context);
+      ret = cudaDeviceSynchronize();
+      if (ret != cudaSuccess) {
+        fprintf(stderr, "MERGESORT sorting failed on query. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
+        exit(-1);
+      }
+
+      // Download sorted kmers [ They will be reuploaded afterwards ]
+      ret = cudaMemcpy(dict_x_keys, ptr_keys, items_read_x * sizeof(uint64_t), cudaMemcpyDeviceToHost);
+      if (ret != cudaSuccess) {
+        fprintf(stderr, "Downloading device kmers (1). Error: %d\n", ret);
+        exit(-1);
+      }
+      ret = cudaMemcpy(dict_x_values, ptr_values, items_read_x * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+      if (ret != cudaSuccess) {
+        fprintf(stderr, "Downloading device kmers (2). Error: %d\n", ret);
+        exit(-1);
+      }
+
+  #ifdef SHOWTIME
+      clock_gettime(CLOCK_MONOTONIC, &HD_end);
+      time_seconds += ((uint64_t)HD_end.tv_sec - (uint64_t)HD_start.tv_sec);
+      time_nanoseconds += ((uint64_t)HD_end.tv_nsec - (uint64_t)HD_start.tv_nsec);
+
+      time_seconds *= BILLION;
+      fprintf(stdout, "[INFO] sortwords Q t= %" PRIu64 " ns\n", time_seconds + time_nanoseconds);
+      time_seconds = 0;
+      time_nanoseconds = 0;
+  #endif
+
+      pos_in_query += words_at_once;
+
+      ////////////////////////////////////////////////////////////////////////////////
+      // Run the reference blocks
+      ////////////////////////////////////////////////////////////////////////////////
+
       int device_pos_in_ref;  // private instance of pos_in_ref per device
 
       #pragma omp atomic capture
@@ -679,7 +680,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
         uint32_t items_read_y = MIN(ref_len - device_pos_in_ref, words_at_once);
 
         // ## POINTER SECTION 3
-        ptr_seq_dev_mem = &data_mem[0];
+        ptr_seq_dev_mem = &data_mem[device_id][0];
         address_checker = address_CHECKPOINT;  // The checkpoint is here since pointers are changed for the hits and frags execution
 
         // Recopy x words because they were overwritten in the hits generation
@@ -970,7 +971,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
           uint32_t runs = (uint32_t)hits_in_first_mem_block / max_copy_diagonals + 1;
 
           // Upload accumulated (overwrite sequence data since its no longer needed)
-          uint32_t *ptr_accum_log = (uint32_t *)(&data_mem[0]);
+          uint32_t *ptr_accum_log = (uint32_t *)(&data_mem[device_id][0]);
           ret = cudaMemcpy(ptr_accum_log, accum_log, sizeof(uint32_t) * n_blocks_hits, cudaMemcpyHostToDevice);
           ret = cudaDeviceSynchronize();
           if (ret != cudaSuccess) {
@@ -1161,7 +1162,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
 #endif
         // ## POINTER SECTION 6
         address_checker = 0;
-        base_ptr = &data_mem[0];
+        base_ptr = &data_mem[device_id][0];
         ptr_seq_dev_mem = (char *)(base_ptr);
         address_checker = realign_address(address_checker + words_at_once, 4);
 
@@ -1312,7 +1313,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
 #endif
         // ## POINTER SECTION 7
         // We will give it the spot of the reference kmers/keys
-        base_ptr = &data_mem[0];
+        base_ptr = &data_mem[device_id][0];
         ptr_seq_dev_mem = (char *)(base_ptr);
         address_checker = address_CHECKPOINT;
 
@@ -1591,7 +1592,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
           uint32_t runs = (uint32_t)hits_in_first_mem_block / max_copy_diagonals + 1;
 
           // Upload accumulated (overwrite sequence data since its no longer needed)
-          uint32_t *ptr_accum_log = (uint32_t *)(&data_mem[0]);
+          uint32_t *ptr_accum_log = (uint32_t *)(&data_mem[device_id][0]);
           ret = cudaMemcpy(ptr_accum_log, accum_log, sizeof(uint32_t) * n_blocks_hits, cudaMemcpyHostToDevice);
           ret = cudaDeviceSynchronize();
           if (ret != cudaSuccess) {
@@ -1777,7 +1778,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
 #endif
         // ## POINTER SECTION 10
         address_checker = 0;
-        base_ptr = &data_mem[0];
+        base_ptr = &data_mem[device_id][0];
         ptr_seq_dev_mem = (char *)(base_ptr);
         address_checker += words_at_once;
 
