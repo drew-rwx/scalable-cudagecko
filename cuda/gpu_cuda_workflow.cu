@@ -619,7 +619,7 @@ int main(int argc, char **argv) {
       clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
-      mergesort(ptr_keys, ptr_values, items_read_x, mgpu::less_t<uint64_t>(), context);
+      mergesort(ptr_keys, ptr_values, items_read_x, mgpu::less_t<uint64_t>(), contexts[device_id]);
       ret = cudaDeviceSynchronize();
       if (ret != cudaSuccess) {
         fprintf(stderr, "MERGESORT sorting failed on query. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
@@ -748,7 +748,7 @@ int main(int argc, char **argv) {
         clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
-        mergesort(ptr_keys_2, ptr_values_2, items_read_y, mgpu::less_t<uint64_t>(), context);
+        mergesort(ptr_keys_2, ptr_values_2, items_read_y, mgpu::less_t<uint64_t>(), contexts[device_id]);
 
         ret = cudaDeviceSynchronize();
         if (ret != cudaSuccess) {
@@ -1095,7 +1095,7 @@ int main(int argc, char **argv) {
           }
         }
 
-        mergesort(ptr_device_diagonals, n_hits_found, mgpu::less_t<uint64_t>(), context);
+        mergesort(ptr_device_diagonals, n_hits_found, mgpu::less_t<uint64_t>(), contexts[device_id]);
 
         ret = cudaDeviceSynchronize();
         if (ret != cudaSuccess) {
@@ -1177,7 +1177,7 @@ int main(int argc, char **argv) {
         // For half of the hits and frags we use the memory pool and for the other half we use the prealloc pool for sorting
         // Otherwise if there are too many hits they wont fit in just one pool
         uint64_t address_checker_pre_alloc = 0;
-        char *base_pre_alloc_ptr = &pre_alloc[0];
+        char *base_pre_alloc_ptr = &pre_alloc[device_id][0];
 
         uint32_t *ptr_left_offset = (uint32_t *)(base_pre_alloc_ptr + address_checker_pre_alloc);
         address_checker_pre_alloc = realign_address(address_checker_pre_alloc + max_hits * sizeof(uint32_t), 128);
@@ -1381,7 +1381,7 @@ int main(int argc, char **argv) {
         // ## POINTER SECTION 8
         // Not required anymore
 
-        mergesort(ptr_keys_2, ptr_values_2, items_read_y, mgpu::less_t<uint64_t>(), context);
+        mergesort(ptr_keys_2, ptr_values_2, items_read_y, mgpu::less_t<uint64_t>(), contexts[device_id]);
         ret = cudaDeviceSynchronize();
 
         if (ret != cudaSuccess) {
@@ -1717,7 +1717,7 @@ int main(int argc, char **argv) {
           }
         }
 
-        mergesort(ptr_device_diagonals, n_hits_found, mgpu::less_t<uint64_t>(), context);
+        mergesort(ptr_device_diagonals, n_hits_found, mgpu::less_t<uint64_t>(), contexts[device_id]);
         ret = cudaDeviceSynchronize();
         if (ret != cudaSuccess) {
           fprintf(stderr, "MODERNGPU sorting failed on hits rev. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
@@ -1793,7 +1793,7 @@ int main(int argc, char **argv) {
         // For half of the hits and frags we use the memory pool and for the other half we use the prealloc pool for sorting
         // Otherwise if there are too many hits they wont fit in just one pool
         uint64_t address_checker_pre_alloc = 0;
-        char *base_pre_alloc_ptr = &pre_alloc[0];
+        char *base_pre_alloc_ptr = &pre_alloc[device_id][0];
 
         uint32_t *ptr_left_offset = (uint32_t *)(base_pre_alloc_ptr + address_checker_pre_alloc);
         address_checker_pre_alloc = realign_address(address_checker_pre_alloc + max_hits * sizeof(uint32_t), 128);
