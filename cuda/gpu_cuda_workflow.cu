@@ -5,8 +5,8 @@
 // #include "cub/cub.cuh"
 #include <cuda_profiler_api.h>
 #include <omp.h>
-#include <limits>
 
+#include <limits>
 #include <moderngpu/kernel_mergesort.hxx>
 
 #define BILLION 1000 * 1000 * 1000;
@@ -148,10 +148,10 @@ int main(int argc, char **argv) {
   // Reserve a slice for the pre allocated pool for moderngpu (and for other things as well while it is not used)
   char *pre_alloc[ret_num_devices];
 
-  // Allocate the pools
-  // TODO: Async seems to only have benefits when running many different jobs on one GPU and attempting to hide latencies
-  // Brandon: using omp for now
-  #pragma omp parallel for num_threads(ret_num_devices) default(shared)
+// Allocate the pools
+// TODO: Async seems to only have benefits when running many different jobs on one GPU and attempting to hide latencies
+// Brandon: using omp for now
+#pragma omp parallel for num_threads(ret_num_devices) default(shared)
   for (int device_id = 0; device_id < ret_num_devices; i++) {
     cudaSetDevice(device_id);
     ret = cudaMalloc(&data_mem[device_id], (effective_global_ram) * sizeof(char));
@@ -193,7 +193,7 @@ int main(int argc, char **argv) {
   // Create a memory pool for each device
   Mem_pool mptrs[ret_num_devices];
 
-  #pragma omp parallel for num_threads(ret_num_devices) default(shared)
+#pragma omp parallel for num_threads(ret_num_devices) default(shared)
   for (int device_id = 0; device_id < ret_num_devices; i++) {
     cudaSetDevice(device_id);
 
@@ -356,7 +356,7 @@ int main(int argc, char **argv) {
   free(pro_r_buffer);
 
   // TODO: all of this section can probably be done on one GPU for now
-  // however, this encoding (kernel_reverse_complement) could present a major bottleneck 
+  // however, this encoding (kernel_reverse_complement) could present a major bottleneck
   // (but distributing may introduce communication overhead...)
   // for now, I think we can just leave it alone
   // ## POINTER SECTION 0 [These depict sections of code where the base pointer to the memory pool is changed/used]
@@ -545,8 +545,7 @@ int main(int argc, char **argv) {
 #ifdef SHOWTIME
     clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
-#pragma omp parallel for num_threads(ret_num_devices) default(shared) \
-private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
+#pragma omp parallel for num_threads(ret_num_devices) default(shared) private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
     for (int device_id = 0; device_id < ret_num_devices; device_id++) {
       cudaSetDevice(device_id);
 
@@ -596,7 +595,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
         fprintf(stdout, "[WARNING] Zero blocks for query words\n");
       }
 
-  #ifdef SHOWTIME
+#ifdef SHOWTIME
       clock_gettime(CLOCK_MONOTONIC, &HD_end);
       time_seconds += ((uint64_t)HD_end.tv_sec - (uint64_t)HD_start.tv_sec);
       time_nanoseconds += ((uint64_t)HD_end.tv_nsec - (uint64_t)HD_start.tv_nsec);
@@ -604,7 +603,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
       fprintf(stdout, "[INFO] words Q t= %" PRIu64 " ns\n", time_seconds + time_nanoseconds);
       time_seconds = 0;
       time_nanoseconds = 0;
-  #endif
+#endif
 
       ////////////////////////////////////////////////////////////////////////////////
       // Sort the query kmers
@@ -616,9 +615,9 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
       // But thats no problem because it is a small fraction of memory
 
       // ## POINTER SECTION 2
-  #ifdef SHOWTIME
+#ifdef SHOWTIME
       clock_gettime(CLOCK_MONOTONIC, &HD_start);
-  #endif
+#endif
 
       mergesort(ptr_keys, ptr_values, items_read_x, mgpu::less_t<uint64_t>(), context);
       ret = cudaDeviceSynchronize();
@@ -639,7 +638,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
         exit(-1);
       }
 
-  #ifdef SHOWTIME
+#ifdef SHOWTIME
       clock_gettime(CLOCK_MONOTONIC, &HD_end);
       time_seconds += ((uint64_t)HD_end.tv_sec - (uint64_t)HD_start.tv_sec);
       time_nanoseconds += ((uint64_t)HD_end.tv_nsec - (uint64_t)HD_start.tv_nsec);
@@ -648,7 +647,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
       fprintf(stdout, "[INFO] sortwords Q t= %" PRIu64 " ns\n", time_seconds + time_nanoseconds);
       time_seconds = 0;
       time_nanoseconds = 0;
-  #endif
+#endif
 
       pos_in_query += words_at_once;
 
@@ -658,7 +657,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
 
       int device_pos_in_ref;  // private instance of pos_in_ref per device
 
-      #pragma omp atomic capture
+#pragma omp atomic capture
       device_pos_in_ref = (pos_in_ref += words_at_once);
 
       // These definitions are for the processing of hits - reused in reference and query
@@ -757,7 +756,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
           exit(-1);
         }
 
-        #pragma omp atomic capture
+#pragma omp atomic capture
         device_pos_in_ref = (pos_in_ref += words_at_once);
         // pos_in_ref += words_at_once;
 
@@ -1282,7 +1281,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
         time_seconds = 0;
         time_nanoseconds = 0;
 #endif
-      } // end forward reference query processing
+      }  // end forward reference query processing
 
       ////////////////////////////////////////////////////////////////////////////////
       // This concludes the execution for the forward strand
@@ -1295,7 +1294,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
 
       int device_pos_in_reverse_ref = 0;  // private instance of pos_in_reverse_ref per device
 
-      #pragma omp atomic capture
+#pragma omp atomic capture
       device_pos_in_reverse_ref = (pos_in_reverse_ref += words_at_once);  // each device starts on its own subsequence
 
       while (device_pos_in_reverse_ref < ref_len) {
@@ -1390,8 +1389,8 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
           exit(-1);
         }
 
-        // Increment position
-        #pragma omp atomic capture
+// Increment position
+#pragma omp atomic capture
         device_pos_in_reverse_ref = (pos_in_reverse_ref += words_at_once);
 
 #ifdef SHOWTIME
@@ -1679,7 +1678,7 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
 #ifdef SHOWTIME
           fprintf(stdout, "[INFO] Max reached sections on reverse = %d out of %" PRIu64 "\n", reached_sections, max_extra_sections);
 #endif
-        } // end gpuhits else block
+        }  // end gpuhits else block
 
         if (n_hits_found > max_hits) {
           fprintf(stderr, "Found too many hits on reverse strand (%u). Use a lower factor.\n", n_hits_found);
@@ -1883,13 +1882,13 @@ private(ptr_seq_dev_mem, ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
         time_seconds = 0;
         time_nanoseconds = 0;
 #endif
-      } // end reverse-complement reference processing
-    } // end parallel-for region
+      }  // end reverse-complement reference processing
+    }    // end parallel-for region
 
     // Restart reference for next query section
     pos_in_ref = 0;  // TODO
     ++split;
-  } // end query processing
+  }  // end query processing
 
   // Close file where frags are written
   fclose(out);
