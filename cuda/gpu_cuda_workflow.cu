@@ -226,8 +226,8 @@ int main(int argc, char **argv) {
   clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
-  if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Quitting before reading in query and reference files...\n");
-  exit(0);
+  // if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Quitting before reading in query and reference files...\n");
+  // exit(0);
   /////////////////////////////////////
   // LOAD QUERY AND REF FASTA FILES
   /////////////////////////////////////
