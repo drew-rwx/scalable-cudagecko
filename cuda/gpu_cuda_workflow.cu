@@ -661,7 +661,7 @@ int main(int argc, char **argv) {
       // Run the reference blocks
       ////////////////////////////////////////////////////////////////////////////////
 
-      int device_pos_in_ref;  // private instance of pos_in_ref per device
+      uint32_t device_pos_in_ref;  // private instance of pos_in_ref per device
 
 #pragma omp atomic capture
       {
