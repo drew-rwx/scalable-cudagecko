@@ -51,8 +51,9 @@ struct context_t {
 
   // Disable copy ctor and assignment operator. We don't want to let the
   // user copy only a slice.
-  context_t(const context_t& rhs) = delete;
-  context_t& operator=(const context_t& rhs) = delete;
+  // NOTE: (brandon) cancelling these deletes to allow for vector allocation
+  // context_t(const context_t& rhs) = delete;
+  // context_t& operator=(const context_t& rhs) = delete;
 
   virtual const cudaDeviceProp& props() const = 0; 
   virtual int ptx_version() const = 0;

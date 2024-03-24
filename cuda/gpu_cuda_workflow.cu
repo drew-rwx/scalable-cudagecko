@@ -190,17 +190,17 @@ int main(int argc, char **argv) {
   // Assign memory pool to moderngpu
   //
 
-  Mem_pool mptr;
-  mptr.mem_ptr = pre_alloc[0];
-  mptr.address = 0;
-  mptr.limit = bytes_to_subtract;
-  mgpu::standard_context_t context(false, 0, &mptr);
+  // Mem_pool mptr;
+  // mptr.mem_ptr = pre_alloc[0];
+  // mptr.address = 0;
+  // mptr.limit = bytes_to_subtract;
+  // mgpu::standard_context_t context(false, 0, &mptr);
 
-  /* // Create a memory pool for each device
+  // Create a memory pool for each device
   Mem_pool mptrs[ret_num_devices];
 
 #pragma omp parallel for num_threads(ret_num_devices) default(shared)
-  for (int device_id = 0; device_id < ret_num_devices; i++) {
+  for (int device_id = 0; device_id < ret_num_devices; device_id++) {
     cudaSetDevice(device_id);
 
     mptrs[device_id].mem_ptr = pre_alloc[device_id];
@@ -213,10 +213,10 @@ int main(int argc, char **argv) {
   contexts.reserve(ret_num_devices);
 
   // Must be done sequentially
-  for (int device_id = 0; device_id < ret_num_devices; i++) {
+  for (int device_id = 0; device_id < ret_num_devices; device_id++) {
     // multi-gpu :: might need to set the correct stream, refer to moderngpu/src/moderngpu/context.hxx line 106
     contexts.push_back({false, 0, &mptrs[device_id]});
-  } */
+  }
 
   // Set working sizes (these will change throughout execution)
   size_t threads_number = 32;
@@ -625,7 +625,7 @@ int main(int argc, char **argv) {
       clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
-      mergesort(ptr_keys, ptr_values, items_read_x, mgpu::less_t<uint64_t>(), context); 
+      mergesort(ptr_keys, ptr_values, items_read_x, mgpu::less_t<uint64_t>(), contexts[device_id]); 
       ret = cudaDeviceSynchronize();
       if (ret != cudaSuccess) {
         fprintf(stderr, "MERGESORT sorting failed on query. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
@@ -758,7 +758,7 @@ int main(int argc, char **argv) {
         clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
-        mergesort(ptr_keys_2, ptr_values_2, items_read_y, mgpu::less_t<uint64_t>(), context);
+        mergesort(ptr_keys_2, ptr_values_2, items_read_y, mgpu::less_t<uint64_t>(), contexts[device_id]);
 
         ret = cudaDeviceSynchronize();
         if (ret != cudaSuccess) {
@@ -1109,7 +1109,7 @@ int main(int argc, char **argv) {
           }
         }
 
-        mergesort(ptr_device_diagonals, n_hits_found, mgpu::less_t<uint64_t>(), context);
+        mergesort(ptr_device_diagonals, n_hits_found, mgpu::less_t<uint64_t>(), contexts[device_id]);
 
         ret = cudaDeviceSynchronize();
         if (ret != cudaSuccess) {
@@ -1399,7 +1399,7 @@ int main(int argc, char **argv) {
         // ## POINTER SECTION 8
         // Not required anymore
 
-        mergesort(ptr_keys_2, ptr_values_2, items_read_y, mgpu::less_t<uint64_t>(), context);
+        mergesort(ptr_keys_2, ptr_values_2, items_read_y, mgpu::less_t<uint64_t>(), contexts[device_id]);
         ret = cudaDeviceSynchronize();
 
         if (ret != cudaSuccess) {
@@ -1739,7 +1739,7 @@ int main(int argc, char **argv) {
           }
         }
 
-        mergesort(ptr_device_diagonals, n_hits_found, mgpu::less_t<uint64_t>(), context);
+        mergesort(ptr_device_diagonals, n_hits_found, mgpu::less_t<uint64_t>(), contexts[device_id]);
         ret = cudaDeviceSynchronize();
         if (ret != cudaSuccess) {
           fprintf(stderr, "MODERNGPU sorting failed on hits rev. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
