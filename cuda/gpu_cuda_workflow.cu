@@ -1208,7 +1208,7 @@ int main(int argc, char **argv) {
         // ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_seq_host[pos_in_ref - words_at_once], MIN(ref_len - (pos_in_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice);
         ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_seq_host[device_pos_in_ref - words_at_once], MIN(ref_len - (device_pos_in_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice);
         if (ret != cudaSuccess) {
-          fprintf(stderr, "Could not copy ref sequence to device for frags. Error: %d\n", ret);
+          fprintf(stderr, "Could not copy ref sequence to device for frags. Line 1211. Error: %d\n", ret);
           exit(-1);
         }
         ret = cudaMemcpy(ptr_device_filt_hits_x, filtered_hits_x, n_hits_kept * sizeof(uint32_t), cudaMemcpyHostToDevice);
@@ -1310,8 +1310,8 @@ int main(int argc, char **argv) {
 
 #pragma omp atomic capture
       {
-        pos_in_ref += words_at_once;
-        device_pos_in_ref = pos_in_ref;
+        pos_in_reverse_ref += words_at_once;
+        device_pos_in_reverse_ref = pos_in_reverse_ref;
       }
 /*       device_pos_in_reverse_ref = (pos_in_reverse_ref += words_at_once);  // each device starts on its own subsequence */
 
@@ -1410,8 +1410,8 @@ int main(int argc, char **argv) {
 // Increment position
 #pragma omp atomic capture
       {
-        pos_in_ref += words_at_once;
-        device_pos_in_ref = pos_in_ref;
+        pos_in_reverse_ref += words_at_once;
+        device_pos_in_ref = pos_in_reverse_ref;
       }
 /*         device_pos_in_reverse_ref = (pos_in_reverse_ref += words_at_once); */
 
@@ -1823,14 +1823,19 @@ int main(int argc, char **argv) {
         uint32_t *ptr_right_offset = (uint32_t *)(base_pre_alloc_ptr + address_checker_pre_alloc);
         address_checker_pre_alloc = realign_address(address_checker_pre_alloc + max_hits * sizeof(uint32_t), 128);
 
+        if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Calling cudaMemcpy(ptr_seq_dev_mem, &query_seq_host[pos_in_query - words_at_once], MIN(query_len - (pos_in_query - words_at_once), words_at_once), cudaMemcpyHostToDevice)\n");
+        if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] ptr_seq_dev_mem = %p ; &query_seq_host[pos_in_query - words_at_once] = %p \n", ptr_seq_dev_mem, &query_seq_host[pos_in_query - words_at_once]);
         ret = cudaMemcpy(ptr_seq_dev_mem, &query_seq_host[pos_in_query - words_at_once], MIN(query_len - (pos_in_query - words_at_once), words_at_once), cudaMemcpyHostToDevice);
         if (ret != cudaSuccess) {
           fprintf(stderr, "Could not copy query sequence to device for frags. Error: %d\n", ret);
           exit(-1);
         }
+
+        if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Calling cudaMemcpy(ptr_seq_dev_mem_aux, &ref_rev_seq_host[device_pos_in_reverse_ref - words_at_once], MIN(ref_len - (device_pos_in_reverse_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice)\n");
+        if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] ptr_seq_dev_mem_aux = %p ; &ref_rev_seq_host[device_pos_in_reverse_ref - words_at_once] = %p ; size = %zd \n", ptr_seq_dev_mem_aux, &ref_rev_seq_host[device_pos_in_reverse_ref - words_at_once], MIN(ref_len - (device_pos_in_reverse_ref - words_at_once), words_at_once));
         ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_rev_seq_host[device_pos_in_reverse_ref - words_at_once], MIN(ref_len - (device_pos_in_reverse_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice);
         if (ret != cudaSuccess) {
-          fprintf(stderr, "Could not copy ref sequence to device for frags. Error: %d\n", ret);
+          fprintf(stderr, "Could not copy ref sequence to device for frags. Line 1838. Error: %d\n", ret);
           exit(-1);
         }
 
@@ -1919,8 +1924,16 @@ int main(int argc, char **argv) {
   fclose(query);
   fclose(ref);
 
-  cudaFree(data_mem);
+  if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Calling cudaFree() on data_mem array\n");
+  for (int device_id = 0; device_id < ret_num_devices; device_id++) {
+    cudaSetDevice(device_id);
+    cudaFree(data_mem[device_id]);
+  }
+  
+  if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Calling cudaFreeHost() on host_pinned_mem\n");
   cudaFreeHost(host_pinned_mem);
+
+  if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Hit end of main()... done.\n");
   return 0;
 }
 
