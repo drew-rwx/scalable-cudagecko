@@ -1927,11 +1927,20 @@ int main(int argc, char **argv) {
   if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Calling cudaFree() on data_mem array\n");
   for (int device_id = 0; device_id < ret_num_devices; device_id++) {
     cudaSetDevice(device_id);
-    cudaFree(data_mem[device_id]);
+
+    ret = cudaFree(data_mem[device_id]);
+    if (ret != cudaSuccess) {
+      fprintf(stderr, "Could not free memory. Error: %d\n", ret);
+      exit(-1);
+    }
   }
   
   if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Calling cudaFreeHost() on host_pinned_mem\n");
-  cudaFreeHost(host_pinned_mem);
+  ret = cudaFreeHost(host_pinned_mem);
+  if (ret != cudaSuccess) {
+    fprintf(stderr, "Could not free host memory. Error: %d\n", ret);
+    exit(-1);
+  }
 
   if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Hit end of main()... done.\n");
   return 0;
