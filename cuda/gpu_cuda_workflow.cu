@@ -559,8 +559,9 @@ int main(int argc, char **argv) {
 #ifdef SHOWTIME
     clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
-#pragma omp parallel for num_threads(ret_num_devices) default(shared) private(ptr_seq_dev_mem_aux, address_checker, number_of_blocks, ret)
-    for (int device_id = 0; device_id < ret_num_devices; device_id++) {
+#pragma omp parallel num_threads(ret_num_devices) default(shared) private(ptr_seq_dev_mem_aux, address_checker, number_of_blocks, ret)
+    {
+      int device_id = omp_get_thread_num();
       cudaSetDevice(device_id);
 
       // ## POINTER SECTION 1
