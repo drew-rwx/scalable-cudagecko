@@ -151,7 +151,7 @@ int main(int argc, char **argv) {
 // Allocate the pools
 // TODO: Async seems to only have benefits when running many different jobs on one GPU and attempting to hide latencies
 // Brandon: using omp for now
-#pragma omp parallel for num_threads(ret_num_devices) default(shared)
+#pragma omp parallel for num_threads(ret_num_devices) default(shared) private(ret)
   for (int device_id = 0; device_id < ret_num_devices; device_id++) {
     cudaSetDevice(device_id);
     ret = cudaMalloc(&data_mem[device_id], (effective_global_ram) * sizeof(char));
@@ -559,7 +559,7 @@ int main(int argc, char **argv) {
 #ifdef SHOWTIME
     clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
-#pragma omp parallel for num_threads(ret_num_devices) default(shared) private(ptr_seq_dev_mem_aux, address_checker, number_of_blocks)
+#pragma omp parallel for num_threads(ret_num_devices) default(shared) private(ptr_seq_dev_mem_aux, address_checker, number_of_blocks, ret)
     for (int device_id = 0; device_id < ret_num_devices; device_id++) {
       cudaSetDevice(device_id);
 
@@ -663,7 +663,10 @@ int main(int argc, char **argv) {
       time_nanoseconds = 0;
 #endif
 
-      pos_in_query += words_at_once;
+      #pragma omp single
+      {
+        pos_in_query += words_at_once;
+      }
 
       ////////////////////////////////////////////////////////////////////////////////
       // Run the reference blocks
