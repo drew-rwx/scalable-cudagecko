@@ -199,9 +199,14 @@ int main(int argc, char **argv) {
   // Create a memory pool for each device
   Mem_pool mptrs[ret_num_devices];
 
+  // Create streams to allow concurrent copy and execute
+  cudaStream_t context_streams[ret_num_devices];
+
 #pragma omp parallel for num_threads(ret_num_devices) default(shared)
   for (int device_id = 0; device_id < ret_num_devices; device_id++) {
     cudaSetDevice(device_id);
+
+    cudaStreamCreate(&context_streams[device_id]);
 
     mptrs[device_id].mem_ptr = pre_alloc[device_id];
     mptrs[device_id].address = 0;
@@ -214,9 +219,12 @@ int main(int argc, char **argv) {
 
   // Must be done sequentially
   for (int device_id = 0; device_id < ret_num_devices; device_id++) {
+    cudaSetDevice(device_id);
+
     // multi-gpu :: might need to set the correct stream, refer to moderngpu/src/moderngpu/context.hxx line 106
-    contexts.push_back({false, 0, &mptrs[device_id]});
+    contexts.push_back({true, context_streams[device_id], &mptrs[device_id]});
   }
+  cudaSetDevice(0); // set as main for now
 
   // Set working sizes (these will change throughout execution)
   size_t threads_number = 32;
@@ -1940,6 +1948,13 @@ int main(int argc, char **argv) {
   if (ret != cudaSuccess) {
     fprintf(stderr, "Could not free host memory. Error: %d\n", ret);
     exit(-1);
+  }
+
+  if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Popping contexts from vector\n");
+  for (int device_id = ret_num_devices - 1; device_id >= 0; device_id--) {
+    cudaSetDevice(device_id);
+
+    contexts.pop_back();
   }
 
   if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Hit end of main()... done.\n");
