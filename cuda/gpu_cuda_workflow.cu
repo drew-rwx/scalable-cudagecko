@@ -202,7 +202,7 @@ int main(int argc, char **argv) {
   // Create streams to allow concurrent copy and execute
   cudaStream_t context_streams[ret_num_devices];
 
-// #pragma omp parallel for num_threads(ret_num_devices) default(shared)
+  // #pragma omp parallel for num_threads(ret_num_devices) default(shared)
   for (int device_id = 0; device_id < ret_num_devices; device_id++) {
     cudaSetDevice(device_id);
 
@@ -225,7 +225,7 @@ int main(int argc, char **argv) {
     contexts.push_back({true, context_streams[device_id], &mptrs[device_id]});
   }
   if (DEBUG_PRINT) printf("[DEBUG] %d contexts created and assigned to respective Mem_pool objects\n", ret_num_devices);
-  cudaSetDevice(0); // set as main for now
+  cudaSetDevice(0);  // set as main for now
 
   // Set working sizes (these will change throughout execution)
   size_t threads_number = 32;
@@ -562,8 +562,7 @@ int main(int argc, char **argv) {
 #endif
 #pragma omp parallel num_threads(ret_num_devices) default(shared) private(ptr_seq_dev_mem_aux, address_checker, number_of_blocks, ret)
     {
-
-      #pragma omp single
+#pragma omp single
       {
         if (DEBUG_PRINT) printf("[DEBUG] omp_get_num_threads() = %d\n", omp_get_num_threads());
       }
@@ -640,7 +639,7 @@ int main(int argc, char **argv) {
       clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
-      mergesort(ptr_keys, ptr_values, items_read_x, mgpu::less_t<uint64_t>(), contexts[device_id]); 
+      mergesort(ptr_keys, ptr_values, items_read_x, mgpu::less_t<uint64_t>(), contexts[device_id]);
       ret = cudaDeviceSynchronize();
       if (ret != cudaSuccess) {
         fprintf(stderr, "MERGESORT sorting failed on query. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
@@ -670,7 +669,7 @@ int main(int argc, char **argv) {
       time_nanoseconds = 0;
 #endif
 
-      #pragma omp single
+#pragma omp single
       {
         pos_in_query += words_at_once;
       }
@@ -786,10 +785,10 @@ int main(int argc, char **argv) {
         }
 
 #pragma omp atomic capture
-      {
-        device_pos_in_ref = pos_in_ref;
-        pos_in_ref += words_at_once;
-      }
+        {
+          device_pos_in_ref = pos_in_ref;
+          pos_in_ref += words_at_once;
+        }
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -1425,10 +1424,10 @@ int main(int argc, char **argv) {
 
 // Increment position
 #pragma omp atomic capture
-      {
-        device_pos_in_reverse_ref = pos_in_reverse_ref;
-        pos_in_reverse_ref += words_at_once;
-      }
+        {
+          device_pos_in_reverse_ref = pos_in_reverse_ref;
+          pos_in_reverse_ref += words_at_once;
+        }
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -1949,7 +1948,7 @@ int main(int argc, char **argv) {
       exit(-1);
     }
   }
-  
+
   if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Calling cudaFreeHost() on host_pinned_mem\n");
   ret = cudaFreeHost(host_pinned_mem);
   if (ret != cudaSuccess) {
