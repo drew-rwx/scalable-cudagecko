@@ -1,0 +1,4 @@
+bin/gpu_cuda_workflow
+
+# root-level outputs
+/*.faa.csv
