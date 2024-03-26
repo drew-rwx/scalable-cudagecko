@@ -101,6 +101,8 @@ class standard_context_t : public context_t {
     cudaEventCreate(&_timer[0]);
     cudaEventCreate(&_timer[1]);
     cudaEventCreate(&_event);
+
+    printf("[MGPU] standard_context_t.init() done\n");
   }
 
  public:

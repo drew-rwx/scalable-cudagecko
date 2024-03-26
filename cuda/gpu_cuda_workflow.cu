@@ -224,6 +224,7 @@ int main(int argc, char **argv) {
     // multi-gpu :: might need to set the correct stream, refer to moderngpu/src/moderngpu/context.hxx line 106
     contexts.push_back({true, context_streams[device_id], &mptrs[device_id]});
   }
+  if (DEBUG_PRINT) printf("[DEBUG] %d contexts created and assigned to respective Mem_pool objects\n", ret_num_devices);
   cudaSetDevice(0); // set as main for now
 
   // Set working sizes (these will change throughout execution)
