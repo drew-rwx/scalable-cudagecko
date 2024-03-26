@@ -1,21 +1,21 @@
 #pragma once
 
-#include <vector>
-#include <memory>
-#include <stack>
 #include <cassert>
 #include <exception>
-#include "util.hxx"
+#include <memory>
+#include <stack>
+#include <vector>
+
 #include "launch_params.hxx"
 #include "prealloc.hxx"
+#include "util.hxx"
 
 BEGIN_MGPU_NAMESPACE
 
-enum memory_space_t { 
-  memory_space_device = 0, 
-  memory_space_host = 1 
+enum memory_space_t {
+  memory_space_device = 0,
+  memory_space_host = 1
 };
-
 
 inline std::string device_prop_string(cudaDeviceProp prop) {
   int ordinal;
@@ -23,22 +23,22 @@ inline std::string device_prop_string(cudaDeviceProp prop) {
 
   size_t freeMem, totalMem;
   cudaError_t result = cudaMemGetInfo(&freeMem, &totalMem);
-  if(cudaSuccess != result) throw cuda_exception_t(result);  
+  if (cudaSuccess != result) throw cuda_exception_t(result);
 
   double memBandwidth = (prop.memoryClockRate * 1000.0) *
-    (prop.memoryBusWidth / 8 * 2) / 1.0e9;
+                        (prop.memoryBusWidth / 8 * 2) / 1.0e9;
 
   std::string s = detail::stringprintf(
-    "%s : %8.3lf Mhz   (Ordinal %d)\n"
-    "%d SMs enabled. Compute Capability sm_%d%d\n"
-    "FreeMem: %6dMB   TotalMem: %6dMB   %2d-bit pointers.\n"
-    "Mem Clock: %8.3lf Mhz x %d bits   (%5.1lf GB/s)\n"
-    "ECC %s\n\n",
-    prop.name, prop.clockRate / 1000.0, ordinal,
-    prop.multiProcessorCount, prop.major, prop.minor,
-    (int)(freeMem / (1<< 20)), (int)(totalMem / (1<< 20)), 8 * sizeof(int*),
-    prop.memoryClockRate / 1000.0, prop.memoryBusWidth, memBandwidth,
-    prop.ECCEnabled ? "Enabled" : "Disabled");
+      "%s : %8.3lf Mhz   (Ordinal %d)\n"
+      "%d SMs enabled. Compute Capability sm_%d%d\n"
+      "FreeMem: %6dMB   TotalMem: %6dMB   %2d-bit pointers.\n"
+      "Mem Clock: %8.3lf Mhz x %d bits   (%5.1lf GB/s)\n"
+      "ECC %s\n\n",
+      prop.name, prop.clockRate / 1000.0, ordinal,
+      prop.multiProcessorCount, prop.major, prop.minor,
+      (int)(freeMem / (1 << 20)), (int)(totalMem / (1 << 20)), 8 * sizeof(int*),
+      prop.memoryClockRate / 1000.0, prop.memoryBusWidth, memBandwidth,
+      prop.ECCEnabled ? "Enabled" : "Disabled");
   return s;
 }
 
@@ -55,7 +55,7 @@ struct context_t {
   // context_t(const context_t& rhs) = delete;
   // context_t& operator=(const context_t& rhs) = delete;
 
-  virtual const cudaDeviceProp& props() const = 0; 
+  virtual const cudaDeviceProp& props() const = 0;
   virtual int ptx_version() const = 0;
   virtual cudaStream_t stream() = 0;
 
@@ -76,45 +76,43 @@ struct context_t {
 // derive this type to provide a custom allocator.
 
 class standard_context_t : public context_t {
-protected:
+ protected:
   cudaDeviceProp _props;
   int _ptx_version;
   cudaStream_t _stream;
   cudaEvent_t _timer[2];
   cudaEvent_t _event;
-  Mem_pool * mptr;
+  Mem_pool* mptr;
   std::stack<uint64_t> allocs;
 
   // Making this a template argument means we won't generate an instance
-  // of dummy_k for each translation unit. 
-  template<int dummy_arg = 0>
+  // of dummy_k for each translation unit.
+  template <int dummy_arg = 0>
   void init() {
     cudaFuncAttributes attr;
     cudaError_t result = cudaFuncGetAttributes(&attr, dummy_k<0>);
-    if(cudaSuccess != result) throw cuda_exception_t(result);
+    if (cudaSuccess != result) throw cuda_exception_t(result);
     _ptx_version = attr.ptxVersion;
 
     int ord;
     cudaGetDevice(&ord);
     cudaGetDeviceProperties(&_props, ord);
-    
+
     cudaEventCreate(&_timer[0]);
     cudaEventCreate(&_timer[1]);
-    cudaEventCreate(&_event);    
+    cudaEventCreate(&_event);
   }
 
-public:
-  standard_context_t(bool print_prop = true, cudaStream_t stream_ = 0, Mem_pool * mem_pool = NULL) : 
-    context_t(), _stream(stream_) {
+ public:
+  standard_context_t(bool print_prop = true, cudaStream_t stream_ = 0, Mem_pool* mem_pool = NULL) : context_t(), _stream(stream_) {
+    mptr = mem_pool;
 
-	mptr = mem_pool;
-
-	if(mptr != NULL){
-		printf("[MGPU] Using provided memory pool\n"); 
-	}
+    if (mptr != NULL) {
+      printf("[MGPU] Using provided memory pool\n");
+    }
 
     init();
-    if(print_prop) {
+    if (print_prop) {
       printf("%s\n", device_prop_string(_props).c_str());
     }
   }
@@ -133,65 +131,55 @@ public:
   virtual void* alloc(size_t size, memory_space_t space) {
     void* p = nullptr;
 
-    if(size) {
+    if (size) {
+      cudaError_t result;
+      if (memory_space_device == space) {
+        if (mptr != NULL) {
+          uint64_t new_address = mptr->address + 32 - (mptr->address % 32);
+          if (new_address + (uint64_t)size >= mptr->limit) {
+            fprintf(stderr, "Not enough memory in pool\n");
+            exit(-1);
+          }
+          uint64_t t_occupied = (new_address + (uint64_t)size) - mptr->address;
+          allocs.push(t_occupied);
+          p = (void*)(mptr->mem_ptr + new_address);
+          // printf("Serving address at %p which is %" PRIu64" \n", p, new_address);
+          mptr->address += t_occupied;
+          result = cudaSuccess;
+        } else
+          result = cudaMalloc(&p, size);
+      } else
+        result = cudaMallocHost(&p, size);
 
-
-	  cudaError_t result;
-	  if(memory_space_device == space)
-	  {
-
-	    if(mptr != NULL)
-		{
-			uint64_t new_address = mptr->address + 32 - (mptr->address % 32);
-			if(new_address + (uint64_t) size >= mptr->limit) { fprintf(stderr, "Not enough memory in pool\n"); exit(-1); }
-			uint64_t t_occupied = (new_address + (uint64_t) size) -  mptr->address;
-			allocs.push(t_occupied);
-			p = (void *) (mptr->mem_ptr + new_address);
-			//printf("Serving address at %p which is %" PRIu64" \n", p, new_address);
-			mptr->address += t_occupied;
-			result = cudaSuccess;
-		}
-	  	else
-			result = cudaMalloc(&p, size);
-	  }
-	  else
-	    result = cudaMallocHost(&p, size);
-
-      if(cudaSuccess != result) throw cuda_exception_t(result);
+      if (cudaSuccess != result) throw cuda_exception_t(result);
     }
-	//printf("Allocating %p\n", p);
-    return p;    
+    // printf("Allocating %p\n", p);
+    return p;
   }
 
   virtual void free(void* p, memory_space_t space) {
-    if(p) {
-	  //printf("Freeing %p\n", p);
+    if (p) {
+      // printf("Freeing %p\n", p);
       cudaError_t result;
-	  
-	  if(memory_space_device == space)
-	  {
-	  	if(mptr != NULL)
-		{
-			uint64_t last_size = allocs.top();
-			allocs.pop();
-			mptr->address -= last_size;
-			result = cudaSuccess;
-		}
-		else
-		  	result = cudaFree(p);
-	  }
-	  else
-	  	result = cudaFreeHost(p);
 
-      if(cudaSuccess != result) throw cuda_exception_t(result);
+      if (memory_space_device == space) {
+        if (mptr != NULL) {
+          uint64_t last_size = allocs.top();
+          allocs.pop();
+          mptr->address -= last_size;
+          result = cudaSuccess;
+        } else
+          result = cudaFree(p);
+      } else
+        result = cudaFreeHost(p);
+
+      if (cudaSuccess != result) throw cuda_exception_t(result);
     }
   }
 
   virtual void synchronize() {
-    cudaError_t result = _stream ? 
-      cudaStreamSynchronize(_stream) : 
-      cudaDeviceSynchronize();
-    if(cudaSuccess != result) throw cuda_exception_t(result);
+    cudaError_t result = _stream ? cudaStreamSynchronize(_stream) : cudaDeviceSynchronize();
+    if (cudaSuccess != result) throw cuda_exception_t(result);
   }
 
   virtual cudaEvent_t event() {
@@ -212,14 +200,14 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 // mem_t
 
-template<typename type_t>
+template <typename type_t>
 class mem_t {
   context_t* _context;
   type_t* _pointer;
   size_t _size;
   memory_space_t _space;
 
-public:
+ public:
   void swap(mem_t& rhs) {
     std::swap(_context, rhs._context);
     std::swap(_pointer, rhs._pointer);
@@ -227,14 +215,12 @@ public:
     std::swap(_space, rhs._space);
   }
 
-  mem_t() : _context(nullptr), _pointer(nullptr), _size(0), 
-    _space(memory_space_device) { }
+  mem_t() : _context(nullptr), _pointer(nullptr), _size(0), _space(memory_space_device) {}
   mem_t& operator=(const mem_t& rhs) = delete;
   mem_t(const mem_t& rhs) = delete;
 
-  mem_t(size_t size, context_t& context, 
-    memory_space_t space = memory_space_device) :
-    _context(&context), _pointer(nullptr), _size(size), _space(space) {
+  mem_t(size_t size, context_t& context,
+        memory_space_t space = memory_space_device) : _context(&context), _pointer(nullptr), _size(size), _space(space) {
     _pointer = (type_t*)context.alloc(sizeof(type_t) * size, space);
   }
 
@@ -247,7 +233,7 @@ public:
   }
 
   ~mem_t() {
-    if(_context && _pointer) _context->free(_pointer, _space);
+    if (_context && _pointer) _context->free(_pointer, _space);
     _pointer = nullptr;
     _size = 0;
   }
@@ -260,8 +246,10 @@ public:
   // Return a deep copy of this container.
   mem_t clone() {
     mem_t cloned(size(), context(), space());
-    if(memory_space_device) dtod(cloned.data(), data(), size());
-    else htoh(cloned.data(), data(), size());
+    if (memory_space_device)
+      dtod(cloned.data(), data(), size());
+    else
+      htoh(cloned.data(), data(), size());
     return cloned;
   }
 };
