@@ -560,7 +560,11 @@ int main(int argc, char **argv) {
 #ifdef SHOWTIME
     clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
-#pragma omp parallel num_threads(ret_num_devices) default(shared) private(ptr_seq_dev_mem_aux, address_checker, number_of_blocks, ret)
+//#pragma omp parallel num_threads(ret_num_devices) default(shared) private(ptr_seq_dev_mem_aux, address_checker, number_of_blocks, ret)
+#pragma omp parallel num_threads(ret_num_devices) default(private) \
+shared(stderr, stdout, data_mem, pos_in_query, pos_in_ref, pos_in_reverse_ref, \
+  query_seq_host, ref_seq_host, words_at_once, ret_num_devices\
+)
     {
 #pragma omp single
       {
