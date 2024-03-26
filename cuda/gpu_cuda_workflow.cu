@@ -578,7 +578,7 @@ int main(int argc, char **argv) {
       address_checker = realign_address(address_checker + words_at_once * sizeof(uint32_t), 256);
       uint64_t address_CHECKPOINT = address_checker;
 
-      fprintf(stdout, "[EXECUTING] Running split %d -> (%d%%)[%u,%u]\n", split, (int)((100 * (uint64_t)pos_in_query) / (uint64_t)query_len), pos_in_query, pos_in_ref);
+      // fprintf(stdout, "[EXECUTING] Device %d running split %d -> (%d%%)[%u,%u]\n", device_id, split, (int)((100 * (uint64_t)pos_in_query) / (uint64_t)query_len), pos_in_query, pos_in_ref);
 
       uint32_t items_read_x = MIN(query_len - pos_in_query, words_at_once);
 
@@ -681,7 +681,6 @@ int main(int argc, char **argv) {
         pos_in_ref += words_at_once;
         device_pos_in_ref = pos_in_ref;
       }
-      // device_pos_in_ref = (pos_in_ref += words_at_once);
 
       // These definitions are for the processing of hits - reused in reference and query
       // TODO put these in corresponding pinned parts
@@ -695,6 +694,8 @@ int main(int argc, char **argv) {
         ////////////////////////////////////////////////////////////////////////////////
         // FORWARD strand in the reference
         ////////////////////////////////////////////////////////////////////////////////
+
+        fprintf(stdout, "[EXECUTING] Device %d running split %d -> (%d%%)[%u,%u]\n", device_id, split, (int)((100 * (uint64_t)pos_in_query) / (uint64_t)query_len), pos_in_query, device_pos_in_ref);
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
