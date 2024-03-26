@@ -202,7 +202,7 @@ int main(int argc, char **argv) {
   // Create streams to allow concurrent copy and execute
   cudaStream_t context_streams[ret_num_devices];
 
-#pragma omp parallel for num_threads(ret_num_devices) default(shared)
+// #pragma omp parallel for num_threads(ret_num_devices) default(shared)
   for (int device_id = 0; device_id < ret_num_devices; device_id++) {
     cudaSetDevice(device_id);
 
@@ -562,6 +562,11 @@ int main(int argc, char **argv) {
 #endif
 #pragma omp parallel num_threads(ret_num_devices) default(shared) private(ptr_seq_dev_mem_aux, address_checker, number_of_blocks, ret)
     {
+
+      #pragma omp single
+      {
+        if (DEBUG_PRINT) printf("[DEBUG] omp_get_num_threads() = %d\n", omp_get_num_threads());
+      }
       int device_id = omp_get_thread_num();
       cudaSetDevice(device_id);
 
@@ -678,8 +683,8 @@ int main(int argc, char **argv) {
 
 #pragma omp atomic capture
       {
-        pos_in_ref += words_at_once;
         device_pos_in_ref = pos_in_ref;
+        pos_in_ref += words_at_once;
       }
 
       // These definitions are for the processing of hits - reused in reference and query
@@ -695,7 +700,7 @@ int main(int argc, char **argv) {
         // FORWARD strand in the reference
         ////////////////////////////////////////////////////////////////////////////////
 
-        fprintf(stdout, "[EXECUTING] Device %d running split %d -> (%d%%)[%u,%u]\n", device_id, split, (int)((100 * (uint64_t)pos_in_query) / (uint64_t)query_len), pos_in_query, device_pos_in_ref);
+        fprintf(stdout, "[EXECUTING] Device %d running split %d -> (%d%%)[%u,%u]\n", device_id, split, (int)((100 * (uint64_t)(pos_in_query - words_at_once)) / (uint64_t)query_len), pos_in_query - words_at_once, device_pos_in_ref);
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
@@ -782,11 +787,9 @@ int main(int argc, char **argv) {
 
 #pragma omp atomic capture
       {
-        pos_in_ref += words_at_once;
         device_pos_in_ref = pos_in_ref;
+        pos_in_ref += words_at_once;
       }
-        /* device_pos_in_ref = (pos_in_ref += words_at_once);
-        // pos_in_ref += words_at_once; */
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -1324,10 +1327,9 @@ int main(int argc, char **argv) {
 
 #pragma omp atomic capture
       {
-        pos_in_reverse_ref += words_at_once;
         device_pos_in_reverse_ref = pos_in_reverse_ref;
+        pos_in_reverse_ref += words_at_once;
       }
-/*       device_pos_in_reverse_ref = (pos_in_reverse_ref += words_at_once);  // each device starts on its own subsequence */
 
       while (device_pos_in_reverse_ref < ref_len) {
         ////////////////////////////////////////////////////////////////////////////////
@@ -1424,10 +1426,9 @@ int main(int argc, char **argv) {
 // Increment position
 #pragma omp atomic capture
       {
+        device_pos_in_reverse_ref = pos_in_reverse_ref;
         pos_in_reverse_ref += words_at_once;
-        device_pos_in_ref = pos_in_reverse_ref;
       }
-/*         device_pos_in_reverse_ref = (pos_in_reverse_ref += words_at_once); */
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
