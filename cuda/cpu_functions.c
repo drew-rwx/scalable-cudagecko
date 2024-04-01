@@ -31,7 +31,6 @@ void build_frag(uint32_t * xStart, uint32_t * xEnd, uint32_t * yStart, uint32_t 
 void filter_and_write_frags(uint32_t * filtered_hits_x, uint32_t * filtered_hits_y, uint32_t * host_left_offset, 
     uint32_t * host_right_offset, uint32_t n_frags, FILE * out, char strand, uint32_t ref_len, uint32_t min_length){
 
-    
     uint32_t current = 0;
 
     uint32_t xStart, xEnd, yStart, yEnd, curr_l;
@@ -593,11 +592,12 @@ void read_kmers(uint64_t query_l, char * seq_x, uint64_t * keys_x, uint64_t * va
 }
 
 void init_args(int argc, char ** av, FILE ** query, unsigned * selected_device, FILE ** ref, FILE ** out, uint32_t * min_length, int * fast,
-     uint32_t * max_frequency, float * factor, uint32_t * n_frags_per_block, uint64_t * _u64_SPLITHITS, float * _f_SECTIONS, uint64_t * max_ram){
+     uint32_t * max_frequency, float * factor, uint32_t * n_frags_per_block, uint64_t * _u64_SPLITHITS, float * _f_SECTIONS, uint64_t * max_ram, char * outname){
     
     int pNum = 0;
     char * p1 = NULL, * p2 = NULL;
-    char outname[2048]; outname[0] = '\0';
+    // char outname[2048];
+    outname[0] = '\0';
     while(pNum < argc){
         if(strcmp(av[pNum], "--help") == 0){
             fprintf(stdout, "USAGE:\n");
@@ -689,19 +689,20 @@ void init_args(int argc, char ** av, FILE ** query, unsigned * selected_device, 
     strcat(outname, "-");
     strcat(outname, p2);
     strcat(outname, ".csv");
-    *out = fopen(outname, "wt");
-    if(*out == NULL){ fprintf(stderr, "Could not open output file\n"); exit(-1); }
+    // *out = fopen(outname, "wt");
+    // if(*out == NULL){ fprintf(stderr, "Could not open output file\n"); exit(-1); }
     if(p1 != NULL) free(p1);
     if(p2 != NULL) free(p2);
     if(*fast != 0 && *max_frequency != 0){ fprintf(stderr, "Sensitive mode must be enabled to use max frequency per hits (use --sensitive)\n"); exit(-1);}
 }
 
 void init_args(int argc, char ** av, FILE ** query, FILE ** ref, FILE ** out, uint32_t * min_length, int * fast,
-     uint32_t * max_frequency, float * factor, uint32_t * n_frags_per_block, uint64_t * _u64_SPLITHITS, float * _f_SECTIONS, uint64_t * max_ram){
+     uint32_t * max_frequency, float * factor, uint32_t * n_frags_per_block, uint64_t * _u64_SPLITHITS, float * _f_SECTIONS, uint64_t * max_ram, char * outname){
     
     int pNum = 0;
     char * p1 = NULL, * p2 = NULL;
-    char outname[2048]; outname[0] = '\0';
+    // char outname[2048];
+    outname[0] = '\0';
     while(pNum < argc){
         if(strcmp(av[pNum], "--help") == 0){
             fprintf(stdout, "USAGE:\n");
@@ -794,8 +795,8 @@ void init_args(int argc, char ** av, FILE ** query, FILE ** ref, FILE ** out, ui
     strcat(outname, "-");
     strcat(outname, p2);
     strcat(outname, ".csv");
-    *out = fopen(outname, "wt");
-    if(*out == NULL){ fprintf(stderr, "Could not open output file\n"); exit(-1); }
+    // *out = fopen(outname, "wt");
+    // if(*out == NULL){ fprintf(stderr, "Could not open output file\n"); exit(-1); }
     if(p1 != NULL) free(p1);
     if(p2 != NULL) free(p2);
     if(*fast != 0 && *max_frequency != 0){ fprintf(stderr, "Sensitive mode must be enabled to use max frequency per hits (use --sensitive)\n"); exit(-1);}

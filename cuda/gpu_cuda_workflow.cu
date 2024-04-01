@@ -37,7 +37,8 @@ int main(int argc, char **argv) {
   uint64_t global_device_RAM = 0;
   float _f_SECTIONS = 0.75;
   FILE *query = NULL, *ref = NULL, *out = NULL;
-  init_args(argc, argv, &query, &ref, &out, &min_length, &fast, &max_frequency, &factor, &n_frags_per_block, &_u64_SPLITHITS, &_f_SECTIONS, &global_device_RAM);
+  char outname[2048];
+  init_args(argc, argv, &query, &ref, &out, &min_length, &fast, &max_frequency, &factor, &n_frags_per_block, &_u64_SPLITHITS, &_f_SECTIONS, &global_device_RAM, outname);
 
   if (fast == 3)
     fprintf(stdout, "[INFO] Using AVX512 intrinsics to compute vector hits.\n");
@@ -142,7 +143,7 @@ int main(int argc, char **argv) {
     factor = 0.45;
   else if (fast == 1)
     factor = 0.45;
-  uint64_t bytes_for_words = (factor * effective_global_ram);  // 512 MB for words
+  uint64_t bytes_for_words = (factor * effective_global_ram) / 2;  // 512 MB for words
   uint64_t words_at_once = bytes_for_words / (8 + 8 + 4 + 4);
   // We have to subtract the bytes for words as well as the region for storing the DNA sequence
   uint64_t max_hits = (effective_global_ram - bytes_for_words - words_at_once) / (2 * 8);  // Max hits must fit twice because of the sorting
@@ -485,8 +486,13 @@ int main(int argc, char **argv) {
   fprintf(stdout, "\t(End   ref)%.64s\n", &ref_seq_host[ref_len - 64]);
   fprintf(stdout, "\t(End   rev)%.64s\n", &ref_rev_seq_host[ref_len - 64]);
 
-  // Write header to CSV
-  print_header(out, query_len, ref_len);
+#pragma omp single
+  {
+    // Write header to CSV
+    out = fopen(outname, "w");  // mode="w" to reset file (remaining fopens should append)
+    print_header(out, query_len, ref_len);
+    fclose(out);
+  }
 
   ////////////////////////////////////////////////////////////////////////////////
   // Allocation of pointers
@@ -1309,7 +1315,13 @@ shared(stderr, stdout, data_mem, pos_in_query, pos_in_ref, pos_in_reverse_ref, \
         // reduction and single-writer? (probably too complex)
         // critical section to file? (probably this, need to verify if output is dependent on other devices, though)
         // or, everyone writes to individual files, then we concatenate the files at the end (ensures ordering)
-        filter_and_write_frags(filtered_hits_x, filtered_hits_y, host_left_offset, host_right_offset, n_hits_kept, out, 'f', ref_len, min_length);
+#pragma omp critical
+        {
+        
+          out = fopen(outname, "a");
+          filter_and_write_frags(filtered_hits_x, filtered_hits_y, host_left_offset, host_right_offset, n_hits_kept, out, 'f', ref_len, min_length);
+          fclose(out);
+        }
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -1921,7 +1933,12 @@ shared(stderr, stdout, data_mem, pos_in_query, pos_in_ref, pos_in_reverse_ref, \
         clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
-        filter_and_write_frags(filtered_hits_x, filtered_hits_y, host_left_offset, host_right_offset, n_hits_kept, out, 'r', ref_len, min_length);
+#pragma omp critical
+        {
+          out = fopen(outname, "a");
+          filter_and_write_frags(filtered_hits_x, filtered_hits_y, host_left_offset, host_right_offset, n_hits_kept, out, 'r', ref_len, min_length);
+          fclose(out);
+        }
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -1941,7 +1958,7 @@ shared(stderr, stdout, data_mem, pos_in_query, pos_in_ref, pos_in_reverse_ref, \
   }  // end query processing
 
   // Close file where frags are written
-  fclose(out);
+  // fclose(out);
   fprintf(stdout, "[INFO] Completed all executions\n");
 
   fclose(query);
@@ -1977,6 +1994,7 @@ shared(stderr, stdout, data_mem, pos_in_query, pos_in_ref, pos_in_reverse_ref, \
 }
 
 void print_header(FILE *out, uint32_t query_len, uint32_t ref_len) {
+  // TODO: fill in undef (maybe just throw this in main, no point in passing in all these arguments for one function call)
   fprintf(out, "All by-Identity Ungapped Fragments (Hits based approach)\n");
   fprintf(out, "[Abr.98/Apr.2010/Dec.2011 -- <ortrelles@uma.es>\n");
   fprintf(out, "SeqX filename : undef\n");
