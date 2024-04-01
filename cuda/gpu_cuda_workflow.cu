@@ -128,6 +128,7 @@ int main(int argc, char **argv) {
   // Retune factor
   if (factor < 0)  // Only if left by default
     factor = factor_chooser(global_device_RAM);
+  factor /= 4;
 
   // TODO: define streams for each cuda device?
   // cudaStream_t cuda_streams[ret_num_devices];
@@ -143,7 +144,7 @@ int main(int argc, char **argv) {
     factor = 0.45;
   else if (fast == 1)
     factor = 0.45;
-  uint64_t bytes_for_words = (factor * effective_global_ram) / 2;  // 512 MB for words
+  uint64_t bytes_for_words = (factor * effective_global_ram);  // 512 MB for words
   uint64_t words_at_once = bytes_for_words / (8 + 8 + 4 + 4);
   // We have to subtract the bytes for words as well as the region for storing the DNA sequence
   uint64_t max_hits = (effective_global_ram - bytes_for_words - words_at_once) / (2 * 8);  // Max hits must fit twice because of the sorting
@@ -486,13 +487,10 @@ int main(int argc, char **argv) {
   fprintf(stdout, "\t(End   ref)%.64s\n", &ref_seq_host[ref_len - 64]);
   fprintf(stdout, "\t(End   rev)%.64s\n", &ref_rev_seq_host[ref_len - 64]);
 
-#pragma omp single
-  {
-    // Write header to CSV
-    out = fopen(outname, "w");  // mode="w" to reset file (remaining fopens should append)
-    print_header(out, query_len, ref_len);
-    fclose(out);
-  }
+  // Write header to CSV
+  out = fopen(outname, "w");  // mode="w" to reset file (remaining fopens should append)
+  print_header(out, query_len, ref_len);
+  fclose(out);
 
   ////////////////////////////////////////////////////////////////////////////////
   // Allocation of pointers
@@ -570,12 +568,6 @@ int main(int argc, char **argv) {
     clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 #pragma omp parallel num_threads(ret_num_devices) default(shared) private(ptr_seq_dev_mem_aux, address_checker, number_of_blocks, ret)
-/*
-#pragma omp parallel num_threads(ret_num_devices) default(private) \
-shared(stderr, stdout, data_mem, pos_in_query, pos_in_ref, pos_in_reverse_ref, \
-  query_seq_host, ref_seq_host, words_at_once, ret_num_devices\
-)
-*/
     {
 #pragma omp single
       {
@@ -618,17 +610,23 @@ shared(stderr, stdout, data_mem, pos_in_query, pos_in_ref, pos_in_reverse_ref, \
       ret = cudaDeviceSynchronize();
 
       number_of_blocks = (items_read_x - KMER_SIZE + 1) / (64) + 1;
-      if (number_of_blocks != 0) {
-        // cudaProfilerStart();
-        kernel_index_global32<<<number_of_blocks, 64>>>(ptr_keys, ptr_values, ptr_seq_dev_mem, pos_in_query, items_read_x);
-        ret = cudaDeviceSynchronize();
-        if (ret != cudaSuccess) {
-          fprintf(stderr, "Could not compute kmers on query. Error: %d\n", ret);
-          exit(-1);
+
+      if (device_id == 0) {
+        // TODO: somehow determine which is the fastest GPU to do this computation
+        // only one GPU needs to generate the key-value pairs for the query
+        if (number_of_blocks != 0) {
+          // cudaProfilerStart();
+          kernel_index_global32<<<number_of_blocks, 64>>>(ptr_keys, ptr_values, ptr_seq_dev_mem, pos_in_query, items_read_x);
+          ret = cudaDeviceSynchronize();
+          if (ret != cudaSuccess) {
+            fprintf(stderr, "Could not compute kmers on query. Error: %d\n", ret);
+            exit(-1);
+          }
+        } else {
+          fprintf(stdout, "[WARNING] Zero blocks for query words\n");
         }
-      } else {
-        fprintf(stdout, "[WARNING] Zero blocks for query words\n");
       }
+#pragma omp barrier
 
 #ifdef SHOWTIME
       clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -654,24 +652,28 @@ shared(stderr, stdout, data_mem, pos_in_query, pos_in_ref, pos_in_reverse_ref, \
       clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
-      mergesort(ptr_keys, ptr_values, items_read_x, mgpu::less_t<uint64_t>(), contexts[device_id]);
-      ret = cudaDeviceSynchronize();
-      if (ret != cudaSuccess) {
-        fprintf(stderr, "MERGESORT sorting failed on query. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
-        exit(-1);
-      }
+      if (device_id == 0) {
+        // only device 0 has populated ptr_keys and ptr_values (see above kernel_index_global32 invokation)
+        mergesort(ptr_keys, ptr_values, items_read_x, mgpu::less_t<uint64_t>(), contexts[device_id]);
+        ret = cudaDeviceSynchronize();
+        if (ret != cudaSuccess) {
+          fprintf(stderr, "MERGESORT sorting failed on query. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
+          exit(-1);
+        }
 
       // Download sorted kmers [ They will be reuploaded afterwards ]
-      ret = cudaMemcpy(dict_x_keys, ptr_keys, items_read_x * sizeof(uint64_t), cudaMemcpyDeviceToHost);
-      if (ret != cudaSuccess) {
-        fprintf(stderr, "Downloading device kmers (1). Error: %d\n", ret);
-        exit(-1);
+        ret = cudaMemcpy(dict_x_keys, ptr_keys, items_read_x * sizeof(uint64_t), cudaMemcpyDeviceToHost);
+        if (ret != cudaSuccess) {
+          fprintf(stderr, "Downloading device kmers (1). Error: %d\n", ret);
+          exit(-1);
+        }
+        ret = cudaMemcpy(dict_x_values, ptr_values, items_read_x * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+        if (ret != cudaSuccess) {
+          fprintf(stderr, "Downloading device kmers (2). Error: %d\n", ret);
+          exit(-1);
+        }
       }
-      ret = cudaMemcpy(dict_x_values, ptr_values, items_read_x * sizeof(uint32_t), cudaMemcpyDeviceToHost);
-      if (ret != cudaSuccess) {
-        fprintf(stderr, "Downloading device kmers (2). Error: %d\n", ret);
-        exit(-1);
-      }
+#pragma omp barrier
 
 #ifdef SHOWTIME
       clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -697,6 +699,7 @@ shared(stderr, stdout, data_mem, pos_in_query, pos_in_ref, pos_in_reverse_ref, \
 
 #pragma omp atomic capture
       {
+        // initialize ref iterator
         device_pos_in_ref = pos_in_ref;
         pos_in_ref += words_at_once;
       }
@@ -801,6 +804,7 @@ shared(stderr, stdout, data_mem, pos_in_query, pos_in_ref, pos_in_reverse_ref, \
 
 #pragma omp atomic capture
         {
+          // increment ref iterator
           device_pos_in_ref = pos_in_ref;
           pos_in_ref += words_at_once;
         }
@@ -1311,13 +1315,8 @@ shared(stderr, stdout, data_mem, pos_in_query, pos_in_ref, pos_in_reverse_ref, \
         clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
-        // TODO: ensure this is parallel-safe, since each device will be writing to the same file
-        // reduction and single-writer? (probably too complex)
-        // critical section to file? (probably this, need to verify if output is dependent on other devices, though)
-        // or, everyone writes to individual files, then we concatenate the files at the end (ensures ordering)
 #pragma omp critical
         {
-        
           out = fopen(outname, "a");
           filter_and_write_frags(filtered_hits_x, filtered_hits_y, host_left_offset, host_right_offset, n_hits_kept, out, 'f', ref_len, min_length);
           fclose(out);
@@ -1347,6 +1346,7 @@ shared(stderr, stdout, data_mem, pos_in_query, pos_in_ref, pos_in_reverse_ref, \
 
 #pragma omp atomic capture
       {
+        // initialize reverse ref iterator
         device_pos_in_reverse_ref = pos_in_reverse_ref;
         pos_in_reverse_ref += words_at_once;
       }
@@ -1446,6 +1446,7 @@ shared(stderr, stdout, data_mem, pos_in_query, pos_in_ref, pos_in_reverse_ref, \
 // Increment position
 #pragma omp atomic capture
         {
+          // increment reverse ref iterator
           device_pos_in_reverse_ref = pos_in_reverse_ref;
           pos_in_reverse_ref += words_at_once;
         }
@@ -1950,10 +1951,10 @@ shared(stderr, stdout, data_mem, pos_in_query, pos_in_ref, pos_in_reverse_ref, \
         time_nanoseconds = 0;
 #endif
       }  // end reverse-complement reference processing
-    }    // end parallel-for region
+    }    // end multi-GPU parallel region
 
     // Restart reference for next query section
-    pos_in_ref = 0;  // TODO
+    pos_in_ref = 0;
     ++split;
   }  // end query processing
 
