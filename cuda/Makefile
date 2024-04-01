@@ -18,5 +18,8 @@ all: gpu_cuda_workflow get_alignments
 gpu_cuda_workflow: gpu_cuda_workflow.cu
 	$(NVIDIAC) $(NVIDIAFLAGS) $(MODERNGPUFLAGS) gpu_cuda_workflow.cu kernels.cu -o $(BIN)/gpu_cuda_workflow
 
+single_gpu_cuda_workflow: single_gpu_cuda_workflow.cu
+	$(NVIDIAC) $(NVIDIAFLAGS) $(MODERNGPUFLAGS) single_gpu_cuda_workflow.cu kernels.cu -o $(BIN)/single_gpu_cuda_workflow
+
 get_alignments: get_alignments.c
 	$(CXX) $(CFLAGS) get_alignments.c common.c -o $(BIN)/gpu_get_alignments

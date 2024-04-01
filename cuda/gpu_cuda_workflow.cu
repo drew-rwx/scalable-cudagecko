@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
   // Calculate how much ram we can use for every chunk
   uint64_t effective_global_ram = (global_device_RAM - memory_allocation_chooser(global_device_RAM));  // Minus 100 to 300 MBs for other stuff
   
-  // Use this if you are running on your personal machine. Could probably get away with more than 1/2 but this is what worked for me.
+  // Use this if other procs are using the GPU. Could probably get away with more than 1/2 but this is what worked for me.
   // effective_global_ram /= 2;
 
   // Retune factor

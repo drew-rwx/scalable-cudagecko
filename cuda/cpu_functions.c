@@ -592,6 +592,110 @@ void read_kmers(uint64_t query_l, char * seq_x, uint64_t * keys_x, uint64_t * va
     }
 }
 
+void init_args(int argc, char ** av, FILE ** query, unsigned * selected_device, FILE ** ref, FILE ** out, uint32_t * min_length, int * fast,
+     uint32_t * max_frequency, float * factor, uint32_t * n_frags_per_block, uint64_t * _u64_SPLITHITS, float * _f_SECTIONS, uint64_t * max_ram){
+    
+    int pNum = 0;
+    char * p1 = NULL, * p2 = NULL;
+    char outname[2048]; outname[0] = '\0';
+    while(pNum < argc){
+        if(strcmp(av[pNum], "--help") == 0){
+            fprintf(stdout, "USAGE:\n");
+            fprintf(stdout, "           GPUGECKO -query [file] -ref [file] -dev [device]\n");
+            fprintf(stdout, "OPTIONAL:\n");
+            fprintf(stdout, "           -len        Minimum length of a frag (default 32)\n");
+            fprintf(stdout, "           -max_freq   [only works in --sensitive] Maximum frequency per hit (default: unlimited)\n");
+            fprintf(stdout, "                       (fast mode can skip highly repeated seeds)\n");
+            fprintf(stdout, "           -factor     Fraction of GPU Ram dedicated to words (default: 0.125)\n");
+            fprintf(stdout, "                       (The bigger the fraction, the faster it will run - however highly similar sequences\n");
+            fprintf(stdout, "                       such as human and gorilla chromosomes require a smaller fractions because of the\n");
+            fprintf(stdout, "                       huge number of hits that are generated)\n");
+            fprintf(stdout, "           -ram        Max ram (in bytes) to be used by one gpu\n");
+            fprintf(stdout, "           --fast      Runs in fast mode in the CPU (sensitive in GPU is default)\n");
+            fprintf(stdout, "           --hyperfast Runs in hyper fast mode in the CPU\n");
+            fprintf(stdout, "           --vector    Runs in sensitive mode in the CPU\n");
+            fprintf(stdout, "           --help      Shows help for program usage\n");
+            fprintf(stdout, "\n");
+            exit(1);
+        }
+
+        if(strcmp(av[pNum], "-query") == 0){
+            *query = fopen(av[pNum+1], "rt");
+            if(*query==NULL){ fprintf(stderr, "Could not open query file\n"); exit(-1); }
+            p1 = get_basename(av[pNum+1]);
+        }
+        
+        if(strcmp(av[pNum], "-ref") == 0){
+            *ref = fopen(av[pNum+1], "rt");
+            if(*ref==NULL){ fprintf(stderr, "Could not open reference file\n"); exit(-1); }
+            p2 = get_basename(av[pNum+1]);
+        }
+
+        if(strcmp(av[pNum], "-dev") == 0){
+            *selected_device = (unsigned) atoi(av[pNum+1]);
+            if(atoi(av[pNum+1]) < 0) { fprintf(stderr, "Device must be >0\n"); exit(-1); }
+        }
+
+        if(strcmp(av[pNum], "-seeds_pb") == 0){
+            *n_frags_per_block = (uint32_t) atoi(av[pNum+1]);
+            if(atoi(av[pNum+1]) < 1) { fprintf(stderr, "Seeds per block must be >0\n"); exit(-1); }
+        }
+
+        if(strcmp(av[pNum], "-len") == 0){
+            *min_length = (uint32_t) atoi(av[pNum+1]);
+            if(atoi(av[pNum+1]) < 1) { fprintf(stderr, "Length must be >0\n"); exit(-1); }
+        }
+
+        if(strcmp(av[pNum], "-ram") == 0){
+            *max_ram = ascii_to_uint64t(av[pNum+1]);
+        }
+        
+
+        if(strcmp(av[pNum], "-factor") == 0){
+            *factor = atof(av[pNum+1]);
+            if(atof(av[pNum+1]) <= 0) { fprintf(stderr, "Factor must be >0\n"); exit(-1); }
+        }
+
+        if(strcmp(av[pNum], "--fast") == 0){
+            *fast = 1;
+        }
+
+        if(strcmp(av[pNum], "--hyperfast") == 0){
+            *fast = 2;
+        }
+
+        if(strcmp(av[pNum], "--vector") == 0){
+            *fast = 3;
+        }
+
+        if(strcmp(av[pNum], "-max_freq") == 0){
+            *max_frequency = (uint32_t) atoi(av[pNum+1]);
+            if(atoi(av[pNum+1]) < 1) { fprintf(stderr, "Frequency must be >0\n"); exit(-1); }
+        }
+
+        if(strcmp(av[pNum], "-u64splits") == 0){
+            *_u64_SPLITHITS = (uint64_t) atoi(av[pNum+1]);
+        }
+        if(strcmp(av[pNum], "-fsections") == 0){
+            *_f_SECTIONS = atof(av[pNum+1]);
+        }
+
+        pNum++;
+
+    }   
+    
+    if(*query==NULL || *ref==NULL){ fprintf(stderr, "You have to include a query and a reference sequence!\n"); exit(-1); }
+    strcat(outname, p1);
+    strcat(outname, "-");
+    strcat(outname, p2);
+    strcat(outname, ".csv");
+    *out = fopen(outname, "wt");
+    if(*out == NULL){ fprintf(stderr, "Could not open output file\n"); exit(-1); }
+    if(p1 != NULL) free(p1);
+    if(p2 != NULL) free(p2);
+    if(*fast != 0 && *max_frequency != 0){ fprintf(stderr, "Sensitive mode must be enabled to use max frequency per hits (use --sensitive)\n"); exit(-1);}
+}
+
 void init_args(int argc, char ** av, FILE ** query, FILE ** ref, FILE ** out, uint32_t * min_length, int * fast,
      uint32_t * max_frequency, float * factor, uint32_t * n_frags_per_block, uint64_t * _u64_SPLITHITS, float * _f_SECTIONS, uint64_t * max_ram){
     
