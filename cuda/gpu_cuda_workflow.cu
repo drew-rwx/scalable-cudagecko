@@ -312,6 +312,9 @@ int main(int argc, char **argv) {
 
   // How about one big alloc (save ~3 seconds on mallocs and improves transfer times)
   char *host_pinned_mem, *base_ptr_pinned;
+  // TODO: maybe forego this and just define normal CPU variables (makes OpenMP scopes much easier to manage)
+  // with regular variables, we also don't need to allocate multiple variables, since private scope will make copies for us
+  // just need to ensure we pass addresses of these new versions of the variables, since cudaMemcpy expects a pointer
 
   // We need for pinned memory:
   // seqx             => query_len
@@ -321,6 +324,24 @@ int main(int argc, char **argv) {
   // dict_x_values    => words_at_once * sizeof(uint32_t)
   // dict_y_keys      => words_at_once * sizeof(uint64_t) [ONLY FOR CPU PROCESSING]
   // dict_y_values    => words_at_once * sizeof(uint32_t) [ONLY FOR CPU PROCESSING]
+  // filtered_hits_x  => max_hits * sizeof(uint32_t)
+  // filtered_hits_y  => max_hits * sizeof(uint32_t)
+  // host_left        => max_hits * sizeof(uint32_t)
+  // host_right       => max_hits * sizeof(uint32_t)
+  // diagonals        => max_hits * sizeof(uint64_t)
+
+  // TODO: multiGPU:
+  // seqx             => query_len
+  // seqy             => ref_len
+  // seqyrev          => ref_len
+  // dict_x_keys      => words_at_once * sizeof(uint64_t)
+  // dict_x_values    => words_at_once * sizeof(uint32_t)
+
+  //// don't think these are used for GPU at all?
+  // dict_y_keys      => words_at_once * sizeof(uint64_t) [ONLY FOR CPU PROCESSING]
+  // dict_y_values    => words_at_once * sizeof(uint32_t) [ONLY FOR CPU PROCESSING]
+
+  //// I think these are per device
   // filtered_hits_x  => max_hits * sizeof(uint32_t)
   // filtered_hits_y  => max_hits * sizeof(uint32_t)
   // host_left        => max_hits * sizeof(uint32_t)
