@@ -312,9 +312,6 @@ int main(int argc, char **argv) {
 
   // How about one big alloc (save ~3 seconds on mallocs and improves transfer times)
   char *host_pinned_mem, *base_ptr_pinned;
-  // TODO: maybe forego this and just define normal CPU variables (makes OpenMP scopes much easier to manage)
-  // with regular variables, we also don't need to allocate multiple variables, since private scope will make copies for us
-  // just need to ensure we pass addresses of these new versions of the variables, since cudaMemcpy expects a pointer
 
   // We need for pinned memory:
   // seqx             => query_len
@@ -331,24 +328,28 @@ int main(int argc, char **argv) {
   // diagonals        => max_hits * sizeof(uint64_t)
 
   // TODO: multiGPU:
+  
+  //// host only (don't need to touch)
   // seqx             => query_len
   // seqy             => ref_len
   // seqyrev          => ref_len
-  // dict_x_keys      => words_at_once * sizeof(uint64_t)
-  // dict_x_values    => words_at_once * sizeof(uint32_t)
 
-  //// don't think these are used for GPU at all?
+  //// only used by host, BUT accessed in parallel by each thread, need to alloc per device
+  //// also, I think this is only used in fast mode, I'll still adjust code to work with it
   // dict_y_keys      => words_at_once * sizeof(uint64_t) [ONLY FOR CPU PROCESSING]
   // dict_y_values    => words_at_once * sizeof(uint32_t) [ONLY FOR CPU PROCESSING]
 
-  //// I think these are per device
+  //// per device
+  // dict_x_keys      => words_at_once * sizeof(uint64_t)
+  // dict_x_values    => words_at_once * sizeof(uint32_t)
   // filtered_hits_x  => max_hits * sizeof(uint32_t)
   // filtered_hits_y  => max_hits * sizeof(uint32_t)
   // host_left        => max_hits * sizeof(uint32_t)
   // host_right       => max_hits * sizeof(uint32_t)
   // diagonals        => max_hits * sizeof(uint64_t)
 
-  uint64_t pinned_bytes_on_host = query_len + 2 * ref_len + words_at_once * 4 + words_at_once * 8 + max_hits * 8 + max_hits * 16;
+  // uint64_t pinned_bytes_on_host = query_len + 2 * ref_len + words_at_once * 4 + words_at_once * 8 + max_hits * 8 + max_hits * 16;
+  uint64_t pinned_bytes_on_host = (query_len + 2 * ref_len) + (ret_num_devices * (words_at_once * 4 + words_at_once * 8 + max_hits * 8 + max_hits * 16));
   pinned_bytes_on_host += 1024 * 1024;  // Adding 1 MB for the extra padding in the realignments
   if (fast != 0) pinned_bytes_on_host += words_at_once * 8 + words_at_once * 4;
   uint64_t pinned_address_checker = 0;
@@ -516,56 +517,54 @@ int main(int argc, char **argv) {
   ////////////////////////////////////////////////////////////////////////////////
   // Allocation of pointers
   ////////////////////////////////////////////////////////////////////////////////
+  // multiGPU: these are each now an array of pointers to each GPU's data structure
+  // subsequent accesses to these pointers MUST be indexed according to thread id
 
   // Allocate memory in host to download kmers and store hits
   // These depend on the number of words
-  uint64_t *dict_x_keys, *dict_y_keys;  // Keys are hashes (64b), values are positions (32b)
-  uint32_t *dict_x_values, *dict_y_values;
-
-  pinned_address_checker = realign_address(pinned_address_checker, 8);
-  dict_x_keys = (uint64_t *)(base_ptr_pinned + pinned_address_checker);
-  pinned_address_checker = realign_address(pinned_address_checker + words_at_once * sizeof(uint64_t), 4);
-
-  dict_x_values = (uint32_t *)(base_ptr_pinned + pinned_address_checker);
-  pinned_address_checker = realign_address(pinned_address_checker + words_at_once * sizeof(uint32_t), 8);
-
-  if (fast != 0) {
-    dict_y_keys = (uint64_t *)(base_ptr_pinned + pinned_address_checker);
-    pinned_address_checker = realign_address(pinned_address_checker + words_at_once * sizeof(uint64_t), 4);
-
-    dict_y_values = (uint32_t *)(base_ptr_pinned + pinned_address_checker);
-    pinned_address_checker = realign_address(pinned_address_checker + words_at_once * sizeof(uint32_t), 4);
-  }
+  uint64_t *dict_x_keys[ret_num_devices], *dict_y_keys[ret_num_devices];  // Keys are hashes (64b), values are positions (32b)
+  uint32_t *dict_x_values[ret_num_devices], *dict_y_values[ret_num_devices];
 
   // These are now depending on the number of hits
-  uint32_t *filtered_hits_x, *filtered_hits_y;
+  uint32_t *filtered_hits_x[ret_num_devices], *filtered_hits_y[ret_num_devices];
 
-  /*
-  // TODO remove
-  Hit * hits;
-  pinned_address_checker = realign_address(pinned_address_checker, 8);
-  hits = (Hit *) (base_ptr_pinned + pinned_address_checker);
-  pinned_address_checker = realign_address(pinned_address_checker + max_hits * sizeof(Hit), 4);
-  */
+  uint32_t *host_left_offset[ret_num_devices], *host_right_offset[ret_num_devices];
+  uint64_t *diagonals[ret_num_devices];
 
-  filtered_hits_x = (uint32_t *)(base_ptr_pinned + pinned_address_checker);
-  pinned_address_checker = realign_address(pinned_address_checker + max_hits * sizeof(uint32_t), 4);
+  for (int i = 0; i < ret_num_devices; i++) {
+    // must be done sequentially since base_ptr_pinned is not thread-safe
+    pinned_address_checker = realign_address(pinned_address_checker, 8);
+    dict_x_keys[i] = (uint64_t *)(base_ptr_pinned + pinned_address_checker);
+    pinned_address_checker = realign_address(pinned_address_checker + words_at_once * sizeof(uint64_t), 4);
 
-  filtered_hits_y = (uint32_t *)(base_ptr_pinned + pinned_address_checker);
-  pinned_address_checker = realign_address(pinned_address_checker + max_hits * sizeof(uint32_t), 4);
+    dict_x_values[i] = (uint32_t *)(base_ptr_pinned + pinned_address_checker);
+    pinned_address_checker = realign_address(pinned_address_checker + words_at_once * sizeof(uint32_t), 8);
 
-  uint32_t *host_left_offset, *host_right_offset;
-  uint64_t *diagonals;
+    if (fast != 0) {
+      dict_y_keys[i] = (uint64_t *)(base_ptr_pinned + pinned_address_checker);
+      pinned_address_checker = realign_address(pinned_address_checker + words_at_once * sizeof(uint64_t), 4);
 
-  pinned_address_checker = realign_address(pinned_address_checker, 4);
-  host_left_offset = (uint32_t *)(base_ptr_pinned + pinned_address_checker);
-  pinned_address_checker = realign_address(pinned_address_checker + max_hits * sizeof(uint32_t), 4);
+      dict_y_values[i] = (uint32_t *)(base_ptr_pinned + pinned_address_checker);
+      pinned_address_checker = realign_address(pinned_address_checker + words_at_once * sizeof(uint32_t), 4);
+    }
 
-  host_right_offset = (uint32_t *)(base_ptr_pinned + pinned_address_checker);
-  pinned_address_checker = realign_address(pinned_address_checker + max_hits * sizeof(uint32_t), 8);
+    filtered_hits_x[i] = (uint32_t *)(base_ptr_pinned + pinned_address_checker);
+    pinned_address_checker = realign_address(pinned_address_checker + max_hits * sizeof(uint32_t), 4);
 
-  diagonals = (uint64_t *)(base_ptr_pinned + pinned_address_checker);
-  pinned_address_checker = realign_address(pinned_address_checker + max_hits * sizeof(uint64_t), 4);
+    filtered_hits_y[i] = (uint32_t *)(base_ptr_pinned + pinned_address_checker);
+    pinned_address_checker = realign_address(pinned_address_checker + max_hits * sizeof(uint32_t), 4);
+
+    pinned_address_checker = realign_address(pinned_address_checker, 4);
+    host_left_offset[i] = (uint32_t *)(base_ptr_pinned + pinned_address_checker);
+    pinned_address_checker = realign_address(pinned_address_checker + max_hits * sizeof(uint32_t), 4);
+
+    host_right_offset[i] = (uint32_t *)(base_ptr_pinned + pinned_address_checker);
+    pinned_address_checker = realign_address(pinned_address_checker + max_hits * sizeof(uint32_t), 8);
+
+    diagonals[i] = (uint64_t *)(base_ptr_pinned + pinned_address_checker);
+    pinned_address_checker = realign_address(pinned_address_checker + max_hits * sizeof(uint64_t), 4);
+  }
+
 
   ////////////////////////////////////////////////////////////////////////////////
   // Read the query and reference in blocks
