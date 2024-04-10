@@ -98,9 +98,9 @@ class standard_context_t : public context_t {
     cudaGetDevice(&ord);
     cudaGetDeviceProperties(&_props, ord);
 
-    cudaEventCreate(&_timer[0]);
-    cudaEventCreate(&_timer[1]);
-    cudaEventCreate(&_event);
+    // cudaEventCreate(&_timer[0]);
+    // cudaEventCreate(&_timer[1]);
+    // cudaEventCreate(&_event);
 
     printf("[MGPU] standard_context_t.init() done\n");
   }
@@ -120,9 +120,9 @@ class standard_context_t : public context_t {
   }
 
   ~standard_context_t() {
-    cudaEventDestroy(_timer[0]);
-    cudaEventDestroy(_timer[1]);
-    cudaEventDestroy(_event);
+    // cudaEventDestroy(_timer[0]);
+    // cudaEventDestroy(_timer[1]);
+    // cudaEventDestroy(_event);
   }
 
   virtual const cudaDeviceProp& props() const { return _props; }
