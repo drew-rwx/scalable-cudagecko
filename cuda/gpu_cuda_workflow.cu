@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
   // Retune factor
   if (factor < 0)  // Only if left by default
     factor = factor_chooser(global_device_RAM);
-  factor /= 4;
+  // factor /= 4;
 
   // TODO: define streams for each cuda device?
   // cudaStream_t cuda_streams[ret_num_devices];
