@@ -1143,7 +1143,7 @@ int main(int argc, char **argv) {
         fprintf(stdout, "[INFO] hits Q-R t= %" PRIu64 " ns\n", time_seconds + time_nanoseconds);
         time_seconds = 0;
         time_nanoseconds = 0;
-        fprintf(stdout, "[INFO] Generated %" PRIu32 " hits on split %d -> (%d%%)[%u,%u]{%u,%u}\n", n_hits_found, split, (int)((100 * MIN((uint64_t)pos_in_ref, (uint64_t)ref_len)) / (uint64_t)ref_len), pos_in_query, pos_in_ref, items_read_x, items_read_y);
+        fprintf(stdout, "[INFO] Generated %" PRIu32 " hits on split %d -> (%d%%)[%u,%u]{%u,%u}\n", n_hits_found, split, (int)((100 * MIN((uint64_t)device_pos_in_ref, (uint64_t)ref_len)) / (uint64_t)ref_len), pos_in_query, device_pos_in_ref, items_read_x, items_read_y);
 #endif
 
         ////////////////////////////////////////////////////////////////////////////////
