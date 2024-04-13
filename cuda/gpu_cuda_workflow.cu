@@ -156,7 +156,7 @@ int main(int argc, char **argv) {
 // Allocate the pools
 // TODO: Async seems to only have benefits when running many different jobs on one GPU and attempting to hide latencies
 // Brandon: using omp for now
-#pragma omp parallel for num_threads(ret_num_devices) default(shared) private(ret)
+// #pragma omp parallel for num_threads(ret_num_devices) default(shared) private(ret)
   for (int device_id = 0; device_id < ret_num_devices; device_id++) {
     cudaSetDevice(device_id);
     ret = cudaMalloc(&data_mem[device_id], (effective_global_ram) * sizeof(char));
@@ -589,7 +589,7 @@ int main(int argc, char **argv) {
 #ifdef SHOWTIME
     clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
-#pragma omp parallel num_threads(ret_num_devices) default(shared) private(ptr_seq_dev_mem_aux, address_checker, number_of_blocks, ret)
+#pragma omp parallel num_threads(ret_num_devices) default(shared) firstprivate(ptr_seq_dev_mem_aux, address_checker, number_of_blocks, ret)
     {
 #pragma omp single
       {
@@ -718,13 +718,14 @@ int main(int argc, char **argv) {
       ////////////////////////////////////////////////////////////////////////////////
 
       uint32_t device_pos_in_ref;  // private instance of pos_in_ref per device
-
+      printf("[POS_IN_REF] dev=%d; device_pos_in_ref=%d\n", device_id, device_pos_in_ref);
 #pragma omp atomic capture
       {
         // initialize ref iterator
         device_pos_in_ref = pos_in_ref;
         pos_in_ref += words_at_once;
       }
+      printf("[POS_IN_REF] dev=%d; device_pos_in_ref=%d\n", device_id, device_pos_in_ref);
 
       // These definitions are for the processing of hits - reused in reference and query
       // TODO put these in corresponding pinned parts
@@ -816,7 +817,10 @@ int main(int argc, char **argv) {
         clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
+#pragma omp critical
+        {
         mergesort(ptr_keys_2, ptr_values_2, items_read_y, mgpu::less_t<uint64_t>(), contexts[device_id]);
+        }
 
         ret = cudaDeviceSynchronize();
         if (ret != cudaSuccess) {
@@ -824,12 +828,6 @@ int main(int argc, char **argv) {
           exit(-1);
         }
 
-#pragma omp atomic capture
-        {
-          // increment ref iterator
-          device_pos_in_ref = pos_in_ref;
-          pos_in_ref += words_at_once;
-        }
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -1165,8 +1163,10 @@ int main(int argc, char **argv) {
             exit(-1);
           }
         }
-
+#pragma omp critical
+        {
         mergesort(ptr_device_diagonals, n_hits_found, mgpu::less_t<uint64_t>(), contexts[device_id]);
+      }
 
         ret = cudaDeviceSynchronize();
         if (ret != cudaSuccess) {
@@ -1263,7 +1263,7 @@ int main(int argc, char **argv) {
           exit(-1);
         }
         // ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_seq_host[pos_in_ref - words_at_once], MIN(ref_len - (pos_in_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice);
-        ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_seq_host[device_pos_in_ref - words_at_once], MIN(ref_len - (device_pos_in_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice);
+        ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_seq_host[device_pos_in_ref], MIN(ref_len - (device_pos_in_ref), words_at_once), cudaMemcpyHostToDevice);
         if (ret != cudaSuccess) {
           fprintf(stderr, "Could not copy ref sequence to device for frags. Line 1211. Error: %d\n", ret);
           exit(-1);
@@ -1292,20 +1292,25 @@ int main(int argc, char **argv) {
 
         number_of_blocks = (n_hits_kept / n_frags_per_block) + 1;
 
+#pragma omp critical
+        {
         if (number_of_blocks != 0) {
+          printf("line 1301 dev=%d CALLED KERNEL!!!!!!!!!!!!\n", device_id);
           // kernel_frags_forward_register<<<number_of_blocks, 32>>>(ptr_device_filt_hits_x, ptr_device_filt_hits_y, ptr_left_offset,
           //                                                         ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, pos_in_ref - words_at_once,
           //                                                         MIN(pos_in_query, query_len), MIN(pos_in_ref, ref_len), n_hits_kept, n_frags_per_block);
+          printf("dev=%d; pos_in_query = %d; device_pos_in_ref = %d\n", device_id, pos_in_query, device_pos_in_ref);
           kernel_frags_forward_register<<<number_of_blocks, 32>>>(ptr_device_filt_hits_x, ptr_device_filt_hits_y, ptr_left_offset,
-                                                                  ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, device_pos_in_ref - words_at_once,
+                                                                  ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, device_pos_in_ref,
                                                                   MIN(pos_in_query, query_len), MIN(device_pos_in_ref, ref_len), n_hits_kept, n_frags_per_block);
 
           ret = cudaDeviceSynchronize();
           if (ret != cudaSuccess) {
-            fprintf(stderr, "Failed on generating forward frags. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
+            fprintf(stderr, "dev = %d; line ~1305; Failed on generating forward frags. Error: %d -> %s\n", device_id, ret, cudaGetErrorString(cudaGetLastError()));
             exit(-1);
           }
         }
+      }
 
         ret = cudaMemcpy(host_left_offset[device_id], ptr_left_offset, n_hits_kept * sizeof(uint32_t), cudaMemcpyDeviceToHost);
         if (ret != cudaSuccess) {
@@ -1353,6 +1358,15 @@ int main(int argc, char **argv) {
         time_seconds = 0;
         time_nanoseconds = 0;
 #endif
+
+        printf("[POS_IN_REF] dev=%d; device_pos_in_ref=%d\n", device_id, device_pos_in_ref);
+#pragma omp atomic capture
+        {
+          // increment ref iterator
+          device_pos_in_ref = pos_in_ref;
+          pos_in_ref += words_at_once;
+        }
+        printf("[POS_IN_REF] dev=%d; device_pos_in_ref=%d\n", device_id, device_pos_in_ref);
       }  // end forward reference query processing
 
       ////////////////////////////////////////////////////////////////////////////////
@@ -1457,21 +1471,20 @@ int main(int argc, char **argv) {
         // ## POINTER SECTION 8
         // Not required anymore
 
+
+#pragma omp critical
+        {
         mergesort(ptr_keys_2, ptr_values_2, items_read_y, mgpu::less_t<uint64_t>(), contexts[device_id]);
         ret = cudaDeviceSynchronize();
+        }
 
         if (ret != cudaSuccess) {
+          printf("[DEBUG MEM] dev = %d ; keys = %x ; values = %x ; items_read_y = %d\n", device_id, ptr_keys_2, ptr_values_2, items_read_y);
           fprintf(stderr, "MODERNGPU sorting failed on words reverse. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
           exit(-1);
         }
 
-// Increment position
-#pragma omp atomic capture
-        {
-          // increment reverse ref iterator
-          device_pos_in_reverse_ref = pos_in_reverse_ref;
-          pos_in_reverse_ref += words_at_once;
-        }
+
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -1797,8 +1810,11 @@ int main(int argc, char **argv) {
           }
         }
 
+        #pragma omp critical
+        {
         mergesort(ptr_device_diagonals, n_hits_found, mgpu::less_t<uint64_t>(), contexts[device_id]);
         ret = cudaDeviceSynchronize();
+        }
         if (ret != cudaSuccess) {
           fprintf(stderr, "MODERNGPU sorting failed on hits rev. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
           exit(-1);
@@ -1881,17 +1897,13 @@ int main(int argc, char **argv) {
         uint32_t *ptr_right_offset = (uint32_t *)(base_pre_alloc_ptr + address_checker_pre_alloc);
         address_checker_pre_alloc = realign_address(address_checker_pre_alloc + max_hits * sizeof(uint32_t), 128);
 
-        if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Calling cudaMemcpy(ptr_seq_dev_mem, &query_seq_host[pos_in_query - words_at_once], MIN(query_len - (pos_in_query - words_at_once), words_at_once), cudaMemcpyHostToDevice)\n");
-        if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] ptr_seq_dev_mem = %p ; &query_seq_host[pos_in_query - words_at_once] = %p \n", ptr_seq_dev_mem, &query_seq_host[pos_in_query - words_at_once]);
         ret = cudaMemcpy(ptr_seq_dev_mem, &query_seq_host[pos_in_query - words_at_once], MIN(query_len - (pos_in_query - words_at_once), words_at_once), cudaMemcpyHostToDevice);
         if (ret != cudaSuccess) {
           fprintf(stderr, "Could not copy query sequence to device for frags. Error: %d\n", ret);
           exit(-1);
         }
 
-        if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Calling cudaMemcpy(ptr_seq_dev_mem_aux, &ref_rev_seq_host[device_pos_in_reverse_ref - words_at_once], MIN(ref_len - (device_pos_in_reverse_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice)\n");
-        if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] ptr_seq_dev_mem_aux = %p ; &ref_rev_seq_host[device_pos_in_reverse_ref - words_at_once] = %p ; size = %zd \n", ptr_seq_dev_mem_aux, &ref_rev_seq_host[device_pos_in_reverse_ref - words_at_once], MIN(ref_len - (device_pos_in_reverse_ref - words_at_once), words_at_once));
-        ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_rev_seq_host[device_pos_in_reverse_ref - words_at_once], MIN(ref_len - (device_pos_in_reverse_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice);
+        ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_rev_seq_host[device_pos_in_reverse_ref], MIN(ref_len - (device_pos_in_reverse_ref), words_at_once), cudaMemcpyHostToDevice);
         if (ret != cudaSuccess) {
           fprintf(stderr, "Could not copy ref sequence to device for frags. Line 1838. Error: %d\n", ret);
           exit(-1);
@@ -1922,11 +1934,12 @@ int main(int argc, char **argv) {
         number_of_blocks = (n_hits_kept / n_frags_per_block) + 1;
 
         if (number_of_blocks != 0) {
+          printf("line 1939 dev=%d CALLED KERNEL!!!!!!!!!!!!\n", device_id);
           // Plot twist: its the same kernel for forward and reverse since sequence is completely reversed
-          kernel_frags_forward_register<<<number_of_blocks, 32>>>(ptr_device_filt_hits_x, ptr_device_filt_hits_y, ptr_left_offset, ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, device_pos_in_reverse_ref - words_at_once, MIN(pos_in_query, query_len), MIN(device_pos_in_reverse_ref, ref_len), n_hits_kept, n_frags_per_block);
+          kernel_frags_forward_register<<<number_of_blocks, 32>>>(ptr_device_filt_hits_x, ptr_device_filt_hits_y, ptr_left_offset, ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, device_pos_in_reverse_ref, MIN(pos_in_query, query_len), MIN(device_pos_in_reverse_ref, ref_len), n_hits_kept, n_frags_per_block);
           ret = cudaDeviceSynchronize();
           if (ret != cudaSuccess) {
-            fprintf(stderr, "Failed on generating forward frags. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
+            fprintf(stderr, "dev = %d; line ~1932; Failed on generating forward frags. Error: %d -> %s\n", device_id, ret, cudaGetErrorString(cudaGetLastError()));
             exit(-1);
           }
         }
@@ -1972,6 +1985,14 @@ int main(int argc, char **argv) {
         time_seconds = 0;
         time_nanoseconds = 0;
 #endif
+
+// Increment position
+#pragma omp atomic capture
+        {
+          // increment reverse ref iterator
+          device_pos_in_reverse_ref = pos_in_reverse_ref;
+          pos_in_reverse_ref += words_at_once;
+        }
       }  // end reverse-complement reference processing
     }    // end multi-GPU parallel region
 

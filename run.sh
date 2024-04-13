@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 
-./bin/gpu_cuda_workflow -query test_data/GCF_protein.faa -ref test_data/GCA_protein.faa
+export CUDA_VISIBLE_DEVICES=0,1
+./bin/gpu_cuda_workflow -query test_data/B.fa -ref test_data/A.fa
