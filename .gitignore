@@ -1,4 +1,5 @@
 bin/gpu_cuda_workflow
+bin/single_gpu_cuda_workflow
 bin/gpu_get_alignments
 
 # root-level outputs

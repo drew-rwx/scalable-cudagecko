@@ -11,7 +11,7 @@
 
 #define BILLION 1000 * 1000 * 1000;
 
-#define DEBUG_PRINT true
+#define DEBUG_PRINT false
 
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
@@ -240,8 +240,6 @@ int main(int argc, char **argv) {
   clock_gettime(CLOCK_MONOTONIC, &HD_start);
 #endif
 
-  // if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Quitting before reading in query and reference files...\n");
-  // exit(0);
   /////////////////////////////////////
   // LOAD QUERY AND REF FASTA FILES
   /////////////////////////////////////
@@ -824,12 +822,6 @@ int main(int argc, char **argv) {
           exit(-1);
         }
 
-#pragma omp atomic capture
-        {
-          // increment ref iterator
-          device_pos_in_ref = pos_in_ref;
-          pos_in_ref += words_at_once;
-        }
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -1143,7 +1135,7 @@ int main(int argc, char **argv) {
         fprintf(stdout, "[INFO] hits Q-R t= %" PRIu64 " ns\n", time_seconds + time_nanoseconds);
         time_seconds = 0;
         time_nanoseconds = 0;
-        fprintf(stdout, "[INFO] Generated %" PRIu32 " hits on split %d -> (%d%%)[%u,%u]{%u,%u}\n", n_hits_found, split, (int)((100 * MIN((uint64_t)device_pos_in_ref, (uint64_t)ref_len)) / (uint64_t)ref_len), pos_in_query, device_pos_in_ref, items_read_x, items_read_y);
+        fprintf(stdout, "[INFO] Generated %" PRIu32 " hits on split %d -> (%d%%)[%u,%u]{%u,%u}\n", n_hits_found, split, (int)((100 * MIN((uint64_t)device_pos_in_ref + words_at_once, (uint64_t)ref_len)) / (uint64_t)ref_len), pos_in_query, device_pos_in_ref + words_at_once, items_read_x, items_read_y);
 #endif
 
         ////////////////////////////////////////////////////////////////////////////////
@@ -1263,7 +1255,7 @@ int main(int argc, char **argv) {
           exit(-1);
         }
         // ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_seq_host[pos_in_ref - words_at_once], MIN(ref_len - (pos_in_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice);
-        ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_seq_host[device_pos_in_ref - words_at_once], MIN(ref_len - (device_pos_in_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice);
+        ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_seq_host[device_pos_in_ref], MIN(ref_len - device_pos_in_ref, words_at_once), cudaMemcpyHostToDevice);
         if (ret != cudaSuccess) {
           fprintf(stderr, "Could not copy ref sequence to device for frags. Line 1211. Error: %d\n", ret);
           exit(-1);
@@ -1297,7 +1289,7 @@ int main(int argc, char **argv) {
           //                                                         ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, pos_in_ref - words_at_once,
           //                                                         MIN(pos_in_query, query_len), MIN(pos_in_ref, ref_len), n_hits_kept, n_frags_per_block);
           kernel_frags_forward_register<<<number_of_blocks, 32>>>(ptr_device_filt_hits_x, ptr_device_filt_hits_y, ptr_left_offset,
-                                                                  ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, device_pos_in_ref - words_at_once,
+                                                                  ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, device_pos_in_ref,
                                                                   MIN(pos_in_query, query_len), MIN(device_pos_in_ref, ref_len), n_hits_kept, n_frags_per_block);
 
           ret = cudaDeviceSynchronize();
@@ -1353,6 +1345,13 @@ int main(int argc, char **argv) {
         time_seconds = 0;
         time_nanoseconds = 0;
 #endif
+
+#pragma omp atomic capture
+        {
+          // increment ref iterator
+          device_pos_in_ref = pos_in_ref;
+          pos_in_ref += words_at_once;
+        }
       }  // end forward reference query processing
 
       ////////////////////////////////////////////////////////////////////////////////
@@ -1465,13 +1464,6 @@ int main(int argc, char **argv) {
           exit(-1);
         }
 
-// Increment position
-#pragma omp atomic capture
-        {
-          // increment reverse ref iterator
-          device_pos_in_reverse_ref = pos_in_reverse_ref;
-          pos_in_reverse_ref += words_at_once;
-        }
 
 #ifdef SHOWTIME
         clock_gettime(CLOCK_MONOTONIC, &HD_end);
@@ -1773,7 +1765,7 @@ int main(int argc, char **argv) {
         fprintf(stdout, "[INFO] hits Q-RC t= %" PRIu64 " ns\n", time_seconds + time_nanoseconds);
         time_seconds = 0;
         time_nanoseconds = 0;
-        fprintf(stdout, "[INFO] Generated %" PRIu32 " hits on reversed split %d -> (%d%%)[%u,%u]{%u,%u}\n", n_hits_found, split, (int)((100 * MIN((uint64_t)device_pos_in_reverse_ref, (uint64_t)ref_len)) / (uint64_t)ref_len), pos_in_query, device_pos_in_reverse_ref, items_read_x, items_read_y);
+        fprintf(stdout, "[INFO] Generated %" PRIu32 " hits on reversed split %d -> (%d%%)[%u,%u]{%u,%u}\n", n_hits_found, split, (int)((100 * MIN((uint64_t)device_pos_in_reverse_ref + words_at_once, (uint64_t)ref_len)) / (uint64_t)ref_len), pos_in_query, device_pos_in_reverse_ref + words_at_once, items_read_x, items_read_y);
 #endif
 
         ////////////////////////////////////////////////////////////////////////////////
@@ -1881,17 +1873,13 @@ int main(int argc, char **argv) {
         uint32_t *ptr_right_offset = (uint32_t *)(base_pre_alloc_ptr + address_checker_pre_alloc);
         address_checker_pre_alloc = realign_address(address_checker_pre_alloc + max_hits * sizeof(uint32_t), 128);
 
-        if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Calling cudaMemcpy(ptr_seq_dev_mem, &query_seq_host[pos_in_query - words_at_once], MIN(query_len - (pos_in_query - words_at_once), words_at_once), cudaMemcpyHostToDevice)\n");
-        if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] ptr_seq_dev_mem = %p ; &query_seq_host[pos_in_query - words_at_once] = %p \n", ptr_seq_dev_mem, &query_seq_host[pos_in_query - words_at_once]);
         ret = cudaMemcpy(ptr_seq_dev_mem, &query_seq_host[pos_in_query - words_at_once], MIN(query_len - (pos_in_query - words_at_once), words_at_once), cudaMemcpyHostToDevice);
         if (ret != cudaSuccess) {
           fprintf(stderr, "Could not copy query sequence to device for frags. Error: %d\n", ret);
           exit(-1);
         }
 
-        if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] Calling cudaMemcpy(ptr_seq_dev_mem_aux, &ref_rev_seq_host[device_pos_in_reverse_ref - words_at_once], MIN(ref_len - (device_pos_in_reverse_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice)\n");
-        if (DEBUG_PRINT) fprintf(stdout, "[DEBUG] ptr_seq_dev_mem_aux = %p ; &ref_rev_seq_host[device_pos_in_reverse_ref - words_at_once] = %p ; size = %zd \n", ptr_seq_dev_mem_aux, &ref_rev_seq_host[device_pos_in_reverse_ref - words_at_once], MIN(ref_len - (device_pos_in_reverse_ref - words_at_once), words_at_once));
-        ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_rev_seq_host[device_pos_in_reverse_ref - words_at_once], MIN(ref_len - (device_pos_in_reverse_ref - words_at_once), words_at_once), cudaMemcpyHostToDevice);
+        ret = cudaMemcpy(ptr_seq_dev_mem_aux, &ref_rev_seq_host[device_pos_in_reverse_ref], MIN(ref_len - (device_pos_in_reverse_ref), words_at_once), cudaMemcpyHostToDevice);
         if (ret != cudaSuccess) {
           fprintf(stderr, "Could not copy ref sequence to device for frags. Line 1838. Error: %d\n", ret);
           exit(-1);
@@ -1923,7 +1911,7 @@ int main(int argc, char **argv) {
 
         if (number_of_blocks != 0) {
           // Plot twist: its the same kernel for forward and reverse since sequence is completely reversed
-          kernel_frags_forward_register<<<number_of_blocks, 32>>>(ptr_device_filt_hits_x, ptr_device_filt_hits_y, ptr_left_offset, ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, device_pos_in_reverse_ref - words_at_once, MIN(pos_in_query, query_len), MIN(device_pos_in_reverse_ref, ref_len), n_hits_kept, n_frags_per_block);
+          kernel_frags_forward_register<<<number_of_blocks, 32>>>(ptr_device_filt_hits_x, ptr_device_filt_hits_y, ptr_left_offset, ptr_right_offset, ptr_seq_dev_mem, ptr_seq_dev_mem_aux, query_len, ref_len, pos_in_query - words_at_once, device_pos_in_reverse_ref, MIN(pos_in_query, query_len), MIN(device_pos_in_reverse_ref, ref_len), n_hits_kept, n_frags_per_block);
           ret = cudaDeviceSynchronize();
           if (ret != cudaSuccess) {
             fprintf(stderr, "Failed on generating forward frags. Error: %d -> %s\n", ret, cudaGetErrorString(cudaGetLastError()));
@@ -1972,6 +1960,14 @@ int main(int argc, char **argv) {
         time_seconds = 0;
         time_nanoseconds = 0;
 #endif
+
+// Increment position
+#pragma omp atomic capture
+        {
+          // increment reverse ref iterator
+          device_pos_in_reverse_ref = pos_in_reverse_ref;
+          pos_in_reverse_ref += words_at_once;
+        }
       }  // end reverse-complement reference processing
     }    // end multi-GPU parallel region
 
