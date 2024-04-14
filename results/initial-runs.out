@@ -1,0 +1,21 @@
+Sat Apr 13 17:47:12 CDT 2024
+baseline
+
+real	25m14.218s
+user	24m57.664s
+sys	0m14.543s
+~~~
+multi-gpu: 1 GPU
+
+real	19m25.380s
+user	19m6.277s
+sys	0m14.427s
+~~~
+multi-gpu: 2 GPU
+
+real	10m24.061s
+user	19m4.898s
+sys	0m28.158s
+~~~
+multi-gpu: 3 GPU
+slurmstepd: error: *** JOB 1631952 ON c301-003 CANCELLED AT 2024-04-13T18:47:34 DUE TO TIME LIMIT ***
