@@ -7,7 +7,8 @@ import statistics
 
 # constants
 RUNS = 3
-MAX_THREADS = 16
+MAX_GPUS = 3
+BYTE_COUNT = (233 * 1000 * 1000) + (2.4 * 1000 * 1000 * 1000)
 
 def read_my_file(file):
     with open(file, "r") as fin:
@@ -111,7 +112,7 @@ print(f"3 GPU run time (s): {gpu_3_time:.2f}")
 #
 
 SHOW_FIGURES = True
-BLOCK_ON_SHOW = True
+BLOCK_ON_SHOW = False
 
 # runtime
 
@@ -151,13 +152,7 @@ plt.savefig("runtime.pdf")
 if SHOW_FIGURES:
     plt.show(block=BLOCK_ON_SHOW)
 
-quit()
-
-#
-# CODE FOR ANDREW'S GC PROGRAMMING FIGURES
-#
-
-# thread runtime
+# throughput
 
 # set font
 plt.rcParams['font.family'] = 'serif'
@@ -165,16 +160,61 @@ plt.rcParams['font.serif'] = ['CMU Serif']
 
 fig, ax = plt.subplots(figsize=(5, 5))
 
-ax.plot(thd_count, thd_runtime, 0.2, color='black', marker='.')
+baseline_thp = BYTE_COUNT / baseline_time / 1000 / 1000
+gpu_1_thp = BYTE_COUNT / gpu_1_time / 1000 / 1000
+gpu_2_thp = BYTE_COUNT / gpu_2_time / 1000 / 1000
+gpu_3_thp = BYTE_COUNT / gpu_3_time / 1000 / 1000
 
-plt.xticks(np.arange(1, MAX_THREADS+1, 1))
-plt.yticks(np.arange(0, 7.1, 0.5))
+print(baseline_thp, gpu_1_thp, gpu_2_thp, gpu_3_thp)
 
-plt.xlim(0.5, MAX_THREADS + 0.5)
-plt.ylim(0, 7)
+ax.bar(1, baseline_thp, 0.2, label='Original', color='red')
+ax.bar(2, gpu_1_thp, 0.2, label='1 GPU', color='blue')
+ax.bar(3, gpu_2_thp, 0.2, label='2 GPU', color='blue')
+ax.bar(4, gpu_3_thp, 0.2, label='3 GPU', color='blue')
 
-ax.set_xlabel("Number of Threads", fontsize=12)
-ax.set_ylabel("Runtime (s)", fontsize=12)
+# plt.xticks(x + width / 2, ['4 Proc.', '8 Proc.', '12 Proc.', '16 Proc.'])
+plt.yticks(np.arange(0, 6.1, 0.5))
+
+ax.set_xlabel("Program Version", fontsize=12)
+ax.set_ylabel("Throughput (MB/s)", fontsize=12)
+
+# y: size of numbers, x: remove ticks
+ax.tick_params(axis='y', labelsize=10)
+ax.tick_params(axis='x', length=0, labelsize=0)
+
+# legend
+ax.legend()
+
+# grid lines
+ax.yaxis.grid(True, linestyle='--', linewidth=0.5)
+ax.set_axisbelow(True)
+
+# title
+plt.title("Homo sapiens (233 MB)-Otolemur Garnettii (2.4 GB)")
+
+plt.tight_layout()
+plt.savefig("throughput.pdf")
+if SHOW_FIGURES:
+    plt.show(block=BLOCK_ON_SHOW)
+
+# speedup
+
+# set font
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams['font.serif'] = ['CMU Serif']
+
+fig, ax = plt.subplots(figsize=(5, 5))
+
+ax.plot([1, 2, 3], [gpu_1_time / gpu_1_time, gpu_1_time / gpu_2_time, gpu_1_time / gpu_3_time], 0.2, color='black', marker='.')
+
+plt.xticks(np.arange(1, MAX_GPUS+1, 1))
+plt.yticks(np.arange(0, 3.1, 0.5))
+
+plt.xlim(0.5, MAX_GPUS + 0.5)
+plt.ylim(0, 3.1)
+
+ax.set_xlabel("Number of GPUs", fontsize=12)
+ax.set_ylabel("Speedup", fontsize=12)
 
 # y: size of numbers, x: remove ticks
 ax.tick_params(axis='y', labelsize=10)
@@ -187,47 +227,13 @@ ax.tick_params(axis='x', length=0)
 ax.yaxis.grid(True, linestyle='--', linewidth=0.5)
 ax.set_axisbelow(True)
 
-plt.tight_layout()
-if SHOW_FIGURES:
-    plt.show(block=False)
-plt.savefig("thd-runtime.pdf")
-
-
-# thread energy
-
-# set font
-plt.rcParams['font.family'] = 'serif'
-plt.rcParams['font.serif'] = ['CMU Serif']
-
-fig, ax = plt.subplots(figsize=(5, 5))
-
-ax.plot(thd_count, thd_energy, 0.2, color='black', marker='.')
-
-plt.xticks(np.arange(1, MAX_THREADS+1, 1))
-plt.yticks(np.arange(0, 161, 10))
-
-plt.xlim(0.5, MAX_THREADS + 0.5)
-plt.ylim(0, 160)
-
-ax.set_xlabel("Number of Threads", fontsize=12)
-ax.set_ylabel("Energy (Ws)", fontsize=12)
-
-# y: size of numbers, x: remove ticks
-ax.tick_params(axis='y', labelsize=10)
-ax.tick_params(axis='x', length=0)
-
-# legend
-# ax.legend()
-
-# grid lines
-ax.yaxis.grid(True, linestyle='--', linewidth=0.5)
-ax.set_axisbelow(True)
+# title
+plt.title("Homo sapiens (233 MB)-Otolemur Garnettii (2.4 GB)")
 
 plt.tight_layout()
 if SHOW_FIGURES:
-    plt.show(block=False)
-plt.savefig("thd-energy.pdf")
-
+    plt.show(block=BLOCK_ON_SHOW)
+plt.savefig("speedup.pdf")
 
 # wait for input to show the figures
 if SHOW_FIGURES:
