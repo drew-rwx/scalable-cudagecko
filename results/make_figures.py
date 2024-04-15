@@ -147,9 +147,9 @@ ax.set_axisbelow(True)
 plt.title("Homo sapiens-Otolemur Garnettii (233 MB-2.4 GB)")
 
 plt.tight_layout()
+plt.savefig("runtime.pdf")
 if SHOW_FIGURES:
     plt.show(block=BLOCK_ON_SHOW)
-plt.savefig("runtime.pdf")
 
 quit()
 
