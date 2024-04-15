@@ -144,7 +144,7 @@ ax.yaxis.grid(True, linestyle='--', linewidth=0.5)
 ax.set_axisbelow(True)
 
 # title
-plt.title("Homo sapiens-Otolemur Garnettii (233 MB-2.4 GB)")
+plt.title("Homo sapiens (233 MB)-Otolemur Garnettii (2.4 GB)")
 
 plt.tight_layout()
 plt.savefig("runtime.pdf")
