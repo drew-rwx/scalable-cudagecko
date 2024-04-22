@@ -82,7 +82,7 @@ int main(int argc, char ** argv)
     start = clock();
 
     // Calculate how much ram we can use for every chunk
-    uint64_t effective_global_ram =  (global_device_RAM - memory_allocation_chooser(global_device_RAM)); //Minus 100 to 300 MBs for other stuff
+    uint64_t effective_global_ram =  (global_device_RAM - memory_allocation_chooser(global_device_RAM)) * 0.75; //Minus 100 to 300 MBs for other stuff
 
     // Retune factor
     if(factor < 0) // Only if left by default
