@@ -23,8 +23,8 @@ RUNS=3
 LOG_FILE_PREPEND=../scale-medium
 BASELINE_BINARY=../bin/single_gpu_cuda_workflow
 OUR_BINARY=../bin/gpu_cuda_workflow
-QUERY=myco.hyop.232.fasta
-REF=myco.hyop.7422.fasta
+QUERY=human_mrna.fa
+REF=alligator.fa
 QUERY_PATH=../test_data/$QUERY
 REF_PATH=../test_data/$REF
 
