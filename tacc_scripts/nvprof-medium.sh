@@ -5,7 +5,7 @@
 #SBATCH -N 1                # total number of nodes requested
 #SBATCH -n 1               # total number of tasks requested
 #SBATCH -p gpu-a100              # queue name normal or development
-#SBATCH -t 03:30:00         # expected maximum runtime (hh:mm:ss)
+#SBATCH -t 01:30:00         # expected maximum runtime (hh:mm:ss)
 #SBATCH --mail-user=api10@txstate.edu
 #SBATCH --mail-type=all    # Send email at begin and end of job
 
@@ -65,7 +65,7 @@ echo "~3 GPU~"
 export CUDA_VISIBLE_DEVICES=$CUDA_3_GPU
 for (( i = 1; i <= $RUNS; i += 1 ))
 do
-	time $NVPROF_PREPEND $OUR_BINARY -query $QUERY_PATH -ref $REF_PATH > "$LOG_FILE_PREPEND.3gpu.log"
+	time $NVPROF_PREPEND $OUR_BINARY -query $QUERY_PATH -ref $REF_PATH > "$LOG_FILE_PREPEND.3gpu.nvprof.log"
 	mv "$QUERY-$REF.csv" ../results/medium-3gpu.nvprof.csv
   mv $NVPROF_PATH ../results/medium-3gpu.nvprof.nvvp
 done
