@@ -5,7 +5,7 @@
 #SBATCH -N 1                # total number of nodes requested
 #SBATCH -n 1               # total number of tasks requested
 #SBATCH -p gpu-a100              # queue name normal or development
-#SBATCH -t 00:30:00         # expected maximum runtime (hh:mm:ss)
+#SBATCH -t 01:00:00         # expected maximum runtime (hh:mm:ss)
 #SBATCH --mail-user=api10@txstate.edu
 #SBATCH --mail-type=all    # Send email at begin and end of job
 
