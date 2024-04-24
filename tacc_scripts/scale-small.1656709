@@ -1,0 +1,50 @@
+Tue Apr 23 20:37:19 CDT 2024
+~baseline~
+
+real	1m54.051s
+user	1m34.442s
+sys	0m13.823s
+
+real	1m49.124s
+user	1m34.935s
+sys	0m13.688s
+
+real	1m49.124s
+user	1m35.003s
+sys	0m13.746s
+~1 GPU~
+
+real	1m11.241s
+user	0m55.893s
+sys	0m13.740s
+
+real	1m10.833s
+user	0m55.877s
+sys	0m13.762s
+
+real	1m10.817s
+user	0m55.857s
+sys	0m13.695s
+~2 GPU~
+
+real	1m2.585s
+user	0m57.417s
+sys	0m27.429s
+
+real	1m3.582s
+user	0m57.303s
+sys	0m28.426s
+
+real	1m5.237s
+user	0m57.316s
+sys	0m30.117s
+~3 GPU~
+
+real	1m15.106s
+user	1m0.893s
+sys	0m45.900s
+
+real	1m13.512s
+user	1m0.906s
+sys	0m44.604s
+slurmstepd: error: *** JOB 1656709 ON c316-002 CANCELLED AT 2024-04-23T20:52:37 DUE TO TIME LIMIT ***

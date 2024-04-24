@@ -1,0 +1,54 @@
+Tue Apr 23 12:08:22 CDT 2024
+~baseline~
+
+real	0m52.625s
+user	0m37.478s
+sys	0m12.999s
+
+real	0m51.414s
+user	0m38.207s
+sys	0m12.962s
+
+real	0m50.251s
+user	0m37.091s
+sys	0m12.935s
+~1 GPU~
+
+real	0m40.343s
+user	0m26.857s
+sys	0m12.953s
+
+real	0m39.431s
+user	0m26.151s
+sys	0m12.909s
+
+real	0m39.949s
+user	0m26.542s
+sys	0m12.972s
+~2 GPU~
+
+real	0m44.726s
+user	0m26.542s
+sys	0m25.287s
+
+real	0m43.820s
+user	0m25.759s
+sys	0m25.266s
+
+real	0m43.840s
+user	0m25.722s
+sys	0m25.201s
+~3 GPU~
+
+real	0m57.068s
+user	0m27.989s
+sys	0m40.156s
+
+real	0m57.781s
+user	0m28.814s
+sys	0m40.090s
+
+real	0m57.514s
+user	0m28.680s
+sys	0m39.987s
+Tue Apr 23 12:18:02 CDT 2024
