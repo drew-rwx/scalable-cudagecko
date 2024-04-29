@@ -8,7 +8,7 @@ import statistics
 # constants
 RUNS = 3
 MAX_GPUS = 3
-BYTE_COUNT = (233 * 1000 * 1000) + (2.4 * 1000 * 1000 * 1000)
+BYTE_COUNT = 3273481150 * 3105893940
 
 def read_my_file(file):
     with open(file, "r") as fin:
@@ -25,7 +25,7 @@ def write_my_file(file, data):
     with open(file, "w") as fout:
         fout.writelines(write_data)
 
-data = read_my_file("all-runs.out")
+data = read_my_file("../tacc_scripts/large.out")
 data = data.split("~~~")
 
 baseline_data = data[0]
@@ -114,44 +114,6 @@ print(f"3 GPU run time (s): {gpu_3_time:.2f}")
 SHOW_FIGURES = True
 BLOCK_ON_SHOW = False
 
-# runtime
-
-# set font
-plt.rcParams['font.family'] = 'serif'
-plt.rcParams['font.serif'] = ['CMU Serif']
-
-fig, ax = plt.subplots(figsize=(5, 5))
-
-ax.bar(1, baseline_time, 0.2, label='Original', color='red')
-ax.bar(2, gpu_1_time, 0.2, label='1 GPU', color='blue')
-ax.bar(3, gpu_2_time, 0.2, label='2 GPU', color='blue')
-ax.bar(4, gpu_3_time, 0.2, label='3 GPU', color='blue')
-
-# plt.xticks(x + width / 2, ['4 Proc.', '8 Proc.', '12 Proc.', '16 Proc.'])
-plt.yticks(np.arange(0, 1501, 100))
-
-ax.set_xlabel("Program Version", fontsize=12)
-ax.set_ylabel("Runtime (s)", fontsize=12)
-
-# y: size of numbers, x: remove ticks
-ax.tick_params(axis='y', labelsize=10)
-ax.tick_params(axis='x', length=0, labelsize=0)
-
-# legend
-ax.legend()
-
-# grid lines
-ax.yaxis.grid(True, linestyle='--', linewidth=0.5)
-ax.set_axisbelow(True)
-
-# title
-plt.title("Homo sapiens (233 MB)-Otolemur Garnettii (2.4 GB)")
-
-plt.tight_layout()
-plt.savefig("runtime.pdf")
-if SHOW_FIGURES:
-    plt.show(block=BLOCK_ON_SHOW)
-
 # throughput
 
 # set font
@@ -160,23 +122,26 @@ plt.rcParams['font.serif'] = ['CMU Serif']
 
 fig, ax = plt.subplots(figsize=(5, 5))
 
-baseline_thp = BYTE_COUNT / baseline_time / 1000 / 1000
-gpu_1_thp = BYTE_COUNT / gpu_1_time / 1000 / 1000
-gpu_2_thp = BYTE_COUNT / gpu_2_time / 1000 / 1000
-gpu_3_thp = BYTE_COUNT / gpu_3_time / 1000 / 1000
+baseline_thp = BYTE_COUNT / baseline_time / 1000 / 1000 / 1000 / 1000
+gpu_1_thp = BYTE_COUNT / gpu_1_time / 1000 / 1000 / 1000 / 1000
+gpu_2_thp = BYTE_COUNT / gpu_2_time / 1000 / 1000 / 1000 / 1000
+gpu_3_thp = BYTE_COUNT / gpu_3_time / 1000 / 1000 / 1000 / 1000
 
-print(baseline_thp, gpu_1_thp, gpu_2_thp, gpu_3_thp)
+print(f"Baseline: {baseline_thp:.2f} Tera-monomers/s")
+print(f"1 GPU: {gpu_1_thp:.2f} Tera-monomers/s")
+print(f"2 GPU: {gpu_2_thp:.2f} Tera-monomers/s")
+print(f"3 GPU: {gpu_3_thp:.2f} Tera-monomers/s")
+
 
 ax.bar(1, baseline_thp, 0.2, label='Original', color='red')
 ax.bar(2, gpu_1_thp, 0.2, label='1 GPU', color='blue')
 ax.bar(3, gpu_2_thp, 0.2, label='2 GPU', color='blue')
 ax.bar(4, gpu_3_thp, 0.2, label='3 GPU', color='blue')
 
-# plt.xticks(x + width / 2, ['4 Proc.', '8 Proc.', '12 Proc.', '16 Proc.'])
-plt.yticks(np.arange(0, 6.1, 0.5))
+plt.yticks(np.arange(0, 50001, 2500))
 
 ax.set_xlabel("Program Version", fontsize=12)
-ax.set_ylabel("Throughput (MB/s)", fontsize=12)
+ax.set_ylabel("Throughput (Tera-monomers/s)", fontsize=12)
 
 # y: size of numbers, x: remove ticks
 ax.tick_params(axis='y', labelsize=10)
@@ -190,10 +155,10 @@ ax.yaxis.grid(True, linestyle='--', linewidth=0.5)
 ax.set_axisbelow(True)
 
 # title
-plt.title("Homo sapiens (233 MB)-Otolemur Garnettii (2.4 GB)")
+plt.title("Throughput—Large")
 
 plt.tight_layout()
-plt.savefig("throughput.pdf")
+plt.savefig("../figures/throughput-large.pdf")
 if SHOW_FIGURES:
     plt.show(block=BLOCK_ON_SHOW)
 
@@ -228,12 +193,12 @@ ax.yaxis.grid(True, linestyle='--', linewidth=0.5)
 ax.set_axisbelow(True)
 
 # title
-plt.title("Homo sapiens (233 MB)-Otolemur Garnettii (2.4 GB)")
+plt.title("Speedup—Large")
 
 plt.tight_layout()
 if SHOW_FIGURES:
     plt.show(block=BLOCK_ON_SHOW)
-plt.savefig("speedup.pdf")
+plt.savefig("../figures/speedup-large.pdf")
 
 # wait for input to show the figures
 if SHOW_FIGURES:
