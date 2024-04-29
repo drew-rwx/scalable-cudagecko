@@ -27,7 +27,7 @@ QUERY=human.fa
 REF=alligator.fa
 QUERY_PATH=../test_data/$QUERY
 REF_PATH=../test_data/$REF
-NSYS_PREPEND=nsys nvprof  # generates a report and sqlite
+NSYS_PREPEND='nsys nvprof'  # generates a report and sqlite
 NSYS_REPORT=./report1.nsys-rep
 NSYS_SQLITE=./report1.sqlite
 
@@ -40,7 +40,7 @@ echo "~baseline~"
 export CUDA_VISIBLE_DEVICES=$CUDA_BASELINE
 for (( i = 1; i <= $RUNS; i += 1 ))
 do
-	$NSYS_PREPEND $BASELINE_BINARY -query $QUERY_PATH -ref $REF_PATH > "$LOG_FILE_PREPEND.baseline.nvprof.log"
+	$NSYS_PREPEND $BASELINE_BINARY -query $QUERY_PATH -ref $REF_PATH
 	mv $QUERY-$REF.csv ../results/medium-baseline.nvprof.csv
   mv $NSYS_REPORT ../results/medium-baseline.nsys-rep
   mv $NSYS_SQLITE ../results/medium-baseline.sqlite
@@ -50,7 +50,7 @@ echo "~1 GPU~"
 export CUDA_VISIBLE_DEVICES=$CUDA_1_GPU
 for (( i = 1; i <= $RUNS; i += 1 ))
 do
-	$NSYS_PREPEND $OUR_BINARY -query $QUERY_PATH -ref $REF_PATH > "$LOG_FILE_PREPEND.1gpu.nvprof.log"
+	$NSYS_PREPEND $OUR_BINARY -query $QUERY_PATH -ref $REF_PATH
 	mv "$QUERY-$REF.csv" ../results/medium-1gpu.nvprof.csv
 	mv $NSYS_REPORT ../results/medium-1gpu.nsys-rep
   mv $NSYS_SQLITE ../results/medium-1gpu.sqlite
@@ -60,7 +60,7 @@ done
 # export CUDA_VISIBLE_DEVICES=$CUDA_2_GPU
 # for (( i = 1; i <= $RUNS; i += 1 ))
 # do
-# 	time $OUR_BINARY -query $QUERY_PATH -ref $REF_PATH > "$LOG_FILE_PREPEND.2gpu.log"
+# 	time $OUR_BINARY -query $QUERY_PATH -ref $REF_PATH
 # 	mv "$QUERY-$REF.csv" ../results/medium-2gpu.csv
 # done
 
@@ -68,9 +68,9 @@ echo "~3 GPU~"
 export CUDA_VISIBLE_DEVICES=$CUDA_3_GPU
 for (( i = 1; i <= $RUNS; i += 1 ))
 do
-	$NSYS_PREPEND $OUR_BINARY -query $QUERY_PATH -ref $REF_PATH > "$LOG_FILE_PREPEND.3gpu.nvprof.log"
+	$NSYS_PREPEND $OUR_BINARY -query $QUERY_PATH -ref $REF_PATH
 	mv "$QUERY-$REF.csv" ../results/medium-3gpu.nvprof.csv
-  mv $NSYS_REPORT ../results/medium-3gpu.nvsys-rep
+  mv $NSYS_REPORT ../results/medium-3gpu.nsys-rep
   mv $NSYS_SQLITE ../results/medium-3gpu.sqlite
 done
 
