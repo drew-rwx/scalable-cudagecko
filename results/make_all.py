@@ -157,10 +157,10 @@ for size in BYTE_COUNTS.keys():
     plt.yticks(range(0, 50 + 1, 10))
 
     # ax.set_xlabel("Program Version", fontsize=12)
-    ax.set_ylabel("Throughput (Peta-monomers/s)", fontsize=12)
+    ax.set_ylabel("Throughput (Peta-monomers/s)", fontsize=15)
 
     # y: size of numbers, x: remove ticks
-    ax.tick_params(axis="y", labelsize=10)
+    ax.tick_params(axis="y", labelsize=15)
     # ax.tick_params(axis="x", length=0, labelsize=0)
 
     # legend
@@ -171,7 +171,7 @@ for size in BYTE_COUNTS.keys():
     ax.set_axisbelow(True)
 
     # title
-    plt.title(f"Throughput, {size} inputs")
+    # plt.title(f"Throughput, {size} inputs")
 
     plt.tight_layout()
     plt.savefig(f"../figures/throughput-{size}.pdf")
@@ -195,17 +195,25 @@ for size in BYTE_COUNTS.keys():
         marker=".",
     )
 
-    plt.xticks(np.arange(1, MAX_GPUS + 1, 1))
+    ax.plot(
+        [1, 2, 3],
+        [1, 2, 3],
+        0.2,
+        color="black",
+        linestyle='dotted'
+    )
+
+    plt.xticks(np.arange(1, MAX_GPUS + 1, 1), fontsize=15)
     plt.yticks(np.arange(0, 3.1, 0.5))
 
     plt.xlim(0.5, MAX_GPUS + 0.5)
     plt.ylim(0, 3.1)
 
-    ax.set_xlabel("Number of GPUs", fontsize=12)
-    ax.set_ylabel("Speedup", fontsize=12)
+    ax.set_xlabel("Number of GPUs", fontsize=15)
+    ax.set_ylabel("Speedup", fontsize=15)
 
     # y: size of numbers, x: remove ticks
-    ax.tick_params(axis="y", labelsize=10)
+    ax.tick_params(axis="y", labelsize=15)
     ax.tick_params(axis="x", length=0)
 
     # legend
@@ -216,7 +224,7 @@ for size in BYTE_COUNTS.keys():
     ax.set_axisbelow(True)
 
     # title
-    plt.title(f"Speedup—{size}")
+    # plt.title(f"Speedup—{size}")
 
     plt.tight_layout()
     if SHOW_FIGURES:
