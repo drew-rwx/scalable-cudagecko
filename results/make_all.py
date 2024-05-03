@@ -15,6 +15,9 @@ BYTE_COUNTS = {
 }
 
 
+all_times = {"small": [], "medium": [], "large": []}
+
+
 def read_my_file(file):
     with open(file, "r") as fin:
         data = fin.read()
@@ -33,6 +36,8 @@ def write_my_file(file, data):
 
 
 for size in BYTE_COUNTS.keys():
+    # setting up data
+
     data = read_my_file(f"../tacc_scripts/{size}.out")
     data = data.split("~~~")
 
@@ -115,6 +120,8 @@ for size in BYTE_COUNTS.keys():
     gpu_3_time = statistics.mean(gpu_3_times)
     print(f"3 GPU run time (s): {gpu_3_time:.2f}")
 
+    all_times[size] = [gpu_1_time, gpu_2_time, gpu_3_time]
+
     #
     # make figures
     #
@@ -125,8 +132,8 @@ for size in BYTE_COUNTS.keys():
     # throughput
 
     # set font
-    plt.rcParams["font.family"] = "serif"
-    plt.rcParams["font.serif"] = ["CMU Serif"]
+    # plt.rcParams["font.family"] = "serif"
+    # plt.rcParams["font.serif"] = ["CMU Serif"]
 
     fig, ax = plt.subplots(figsize=(4, 4))
 
@@ -179,59 +186,60 @@ for size in BYTE_COUNTS.keys():
     if SHOW_FIGURES:
         plt.show(block=BLOCK_ON_SHOW)
 
-    # speedup
+#
+# speedup
+#
 
-    # set font
-    plt.rcParams["font.family"] = "serif"
-    plt.rcParams["font.serif"] = ["CMU Serif"]
+# set font
+# plt.rcParams["font.family"] = "serif"
+# plt.rcParams["font.serif"] = ["CMU Serif"]
 
-    fig, ax = plt.subplots(figsize=(5, 5))
+fig, ax = plt.subplots(figsize=(2.5, 2.5))
+
+ax.plot([0, 1, 2, 3, 4], [0, 1, 2, 3, 4], 0.2, color="black", linestyle="dotted")
+
+for size in all_times.keys():
+    gpu_1_time = all_times[size][0]
+    gpu_2_time = all_times[size][1]
+    gpu_3_time = all_times[size][2]
 
     ax.plot(
         [1, 2, 3],
         [gpu_1_time / gpu_1_time, gpu_1_time / gpu_2_time, gpu_1_time / gpu_3_time],
-        0.2,
-        color="black",
+        linewidth=2.5,
+        label=size,
         marker=".",
     )
 
-    ax.plot(
-        [1, 2, 3],
-        [1, 2, 3],
-        0.2,
-        color="black",
-        linestyle='dotted'
-    )
+plt.xticks(np.arange(1, MAX_GPUS + 1, 1))
+plt.yticks(np.arange(1, 3.1, 1))
 
-    plt.xticks(np.arange(1, MAX_GPUS + 1, 1), fontsize=15)
-    plt.yticks(np.arange(0, 3.1, 0.5))
+plt.xlim(0.75, MAX_GPUS + 0.25)
+plt.ylim(0.75, 3.1)
 
-    plt.xlim(0.5, MAX_GPUS + 0.5)
-    plt.ylim(0, 3.1)
+ax.set_xlabel("Number of GPUs")
+ax.set_ylabel("Speedup")
 
-    ax.set_xlabel("Number of GPUs", fontsize=15)
-    ax.set_ylabel("Speedup", fontsize=15)
+ax.tick_params(axis="y")
+ax.tick_params(axis="x")
 
-    # y: size of numbers, x: remove ticks
-    ax.tick_params(axis="y", labelsize=15)
-    ax.tick_params(axis="x", length=0)
+# grid lines
+ax.yaxis.grid(True, linestyle="--", linewidth=0.5)
+ax.xaxis.grid(True, linestyle="--", linewidth=0.5)
+ax.set_axisbelow(True)
 
-    # legend
-    # ax.legend()
+# legend
+ax.legend(loc="upper left")
 
-    # grid lines
-    ax.yaxis.grid(True, linestyle="--", linewidth=0.5)
-    ax.set_axisbelow(True)
+# title
+# plt.title(f"Speedup—{size}")
 
-    # title
-    # plt.title(f"Speedup—{size}")
+plt.tight_layout()
+if SHOW_FIGURES:
+    plt.show(block=BLOCK_ON_SHOW)
+plt.savefig(f"../figures/speedup.pdf")
+plt.savefig(f"../figures/speedup.png")
 
-    plt.tight_layout()
-    if SHOW_FIGURES:
-        plt.show(block=BLOCK_ON_SHOW)
-    plt.savefig(f"../figures/speedup-{size}.pdf")
-    plt.savefig(f"../figures/speedup-{size}.png")
-
-    # wait for input to show the figures
-    if SHOW_FIGURES:
-        input()
+# wait for input to show the figures
+if SHOW_FIGURES:
+    input()
