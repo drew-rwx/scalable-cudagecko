@@ -1,4 +1,4 @@
-# CUDAGECKO
+# Scalable CUDAGECKO
 
 CUDAGECKO is a GPU implementation for the large-scale, seed-and-extend GECKO algorithm. 
 
@@ -14,11 +14,23 @@ CUDAGECKO runs completely on the GPU by default - However, you can turn on parti
 
 Clone the repository and run:
 
-`make install -C cudagecko/cuda`
+<!-- `make install -C cudagecko/cuda` -->
+
+```
+bash ./INSTALL.sh
+```
 
 ## Use
 
-`cudagecko/bin/gpu_cuda_workflow -query inputQueryFasta -ref inputReferenceFasta -dev 0`
+To run normally
+
+```cudagecko/bin/gpu_cuda_workflow -query inputQueryFasta -ref inputReferenceFasta -dev 0```
+
+We also include a script to run on a small test data:
+
+```
+bash ./run.sh
+```
 
 For a list of parameters, use --help
 
