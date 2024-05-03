@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def append_misc(arr):
@@ -44,16 +45,63 @@ ours2gpu_gpu1 = [0.6381, 0.1493, 0.0961, 0.0624, 0.0172]
 ours2gpu_gpu2 = [0.6802, 0.1743, 0.0688, 0.0590, 0.0172]
 
 append_misc(baseline_api)
-draw_pie(categories_api, baseline_api, "baseline-api")
-append_misc(baseline_gpu)
-draw_pie(categories_gpu, baseline_gpu, "baseline-gpu")
-
-# append_misc(ours1gpu_api)
-# append_misc(ours1gpu_gpu)
-
 append_misc(ours2gpu_api)
-draw_pie(categories_api, ours2gpu_api, "2gpu-api")
+append_misc(baseline_gpu)
 append_misc(ours2gpu_gpu1)
-draw_pie(categories_gpu, ours2gpu_gpu1, "2gpu-gpu1")
 append_misc(ours2gpu_gpu2)
-draw_pie(categories_gpu, ours2gpu_gpu2, "2gpu-gpu2")
+
+width = 0.8
+
+#
+# api graph
+#
+
+bar_labels = ["Baseline", "2 GPU (ours)"]
+data_reorganized = {}
+for i in range(len(categories_api)):
+    data_reorganized[categories_api[i]] = [baseline_api[i], ours2gpu_api[i]]
+
+fig, ax = plt.subplots(figsize=(5, 4))
+ax.yaxis.grid(True, linestyle="--", linewidth=0.5)
+ax.set_axisbelow(True)
+
+bottom = np.zeros(len(bar_labels))
+for category, proportions in data_reorganized.items():
+    p = ax.bar(
+        bar_labels, proportions, width, label=category, bottom=bottom, edgecolor="black"
+    )
+    bottom += proportions
+
+ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2)
+
+plt.tight_layout()
+plt.savefig(f"api_proportions.pdf")
+
+#
+# kernel graph
+#
+
+bar_labels = ["Baseline", "Ours, GPU1", "Ours, GPU2"]
+data_reorganized = {}
+for i in range(len(categories_gpu)):
+    data_reorganized[categories_gpu[i]] = [
+        baseline_gpu[i],
+        ours2gpu_gpu1[i],
+        ours2gpu_gpu2[i],
+    ]
+
+fig, ax = plt.subplots(figsize=(5, 4))
+ax.yaxis.grid(True, linestyle="--", linewidth=0.5)
+ax.set_axisbelow(True)
+
+bottom = np.zeros(len(bar_labels))
+for category, proportions in data_reorganized.items():
+    p = ax.bar(
+        bar_labels, proportions, width, label=category, bottom=bottom, edgecolor="black"
+    )
+    bottom += proportions
+
+ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2)
+
+plt.tight_layout()
+plt.savefig(f"kernel_proportions.pdf")
